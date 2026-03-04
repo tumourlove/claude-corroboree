@@ -214,22 +214,31 @@ class SessionManager {
   }
 
   _findExecutable(name) {
+    // Cache resolved path — executable location doesn't change during session
+    if (!this._executableCache) this._executableCache = {};
+    if (this._executableCache[name]) return this._executableCache[name];
+
     const { execSync } = require('child_process');
+    let result = name;
     // Try common locations first
     const commonPaths = [
       path.join(os.homedir(), '.local', 'bin', name + (os.platform() === 'win32' ? '.exe' : '')),
       path.join(os.homedir(), '.local', 'bin', name),
     ];
     for (const p of commonPaths) {
-      if (fs.existsSync(p)) return p;
+      if (fs.existsSync(p)) { result = p; break; }
     }
-    // Fall back to shell resolution
-    try {
-      const cmd = os.platform() === 'win32' ? `where ${name}` : `which ${name}`;
-      return execSync(cmd, { encoding: 'utf8' }).trim().split('\n')[0];
-    } catch (e) {
-      return name; // hope it's in PATH at runtime
+    if (result === name) {
+      // Fall back to shell resolution
+      try {
+        const cmd = os.platform() === 'win32' ? `where ${name}` : `which ${name}`;
+        result = execSync(cmd, { encoding: 'utf8' }).trim().split('\n')[0];
+      } catch (e) {
+        // hope it's in PATH at runtime
+      }
     }
+    this._executableCache[name] = result;
+    return result;
   }
 
   _buildSystemPrompt(sessionId, template) {

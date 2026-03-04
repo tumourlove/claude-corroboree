@@ -197,10 +197,10 @@ window.addEventListener('nexus:focus-tab', (e) => {
   tabManager.activateTab(e.detail.id);
 });
 
-// Refresh dashboard with current sessions (debounced to avoid rapid IPC/DOM churn)
+// Refresh dashboard with current sessions (trailing-edge debounce for latest state)
 let _refreshTimer = null;
 function refreshDashboard() {
-  if (_refreshTimer) return;
+  if (_refreshTimer) clearTimeout(_refreshTimer);
   _refreshTimer = setTimeout(async () => {
     _refreshTimer = null;
     const dash = tabManager.getDashboard();
@@ -211,15 +211,15 @@ function refreshDashboard() {
 }
 
 // Also refresh when sessions are created/exited
-window.nexus.onSessionCreated(() => refreshDashboard());
-window.nexus.onSessionExited(() => refreshDashboard());
+window.nexus.onSessionCreated(() => { refreshDashboard(); updateStatusBar(); });
+window.nexus.onSessionExited(() => { refreshDashboard(); updateStatusBar(); });
 
-// Update session count
+// Update session count (event-driven, no polling)
 function updateStatusBar() {
   const count = tabManager.tabs.size;
   document.getElementById('session-count').textContent = `${count} session${count !== 1 ? 's' : ''}`;
 }
-setInterval(updateStatusBar, 1000);
+updateStatusBar();
 
 // --- Auto-updater UI ---
 const updateEl = document.getElementById('update-status');

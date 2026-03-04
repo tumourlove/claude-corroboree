@@ -146,7 +146,7 @@ export class Dashboard {
     const entry = document.createElement('div');
     entry.className = 'dash-log-entry';
     const time = new Date().toLocaleTimeString();
-    entry.innerHTML = `<span class="dash-log-time">${time}</span> ${message}`;
+    entry.innerHTML = `<span class="dash-log-time">${time}</span> ${this._escapeHtml(message)}`;
     el.appendChild(entry);
     while (el.children.length > 100) el.removeChild(el.firstChild);
     el.scrollTop = el.scrollHeight;

@@ -196,6 +196,7 @@ export class TabManager {
     this.tabs.delete(id);
 
     if (tab.type === 'terminal') {
+      window.nexus.offTerminalData(id);
       window.nexus.closeSession(id);
     }
 
