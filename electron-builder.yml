@@ -2,8 +2,17 @@ appId: com.claude-nexus.app
 productName: Claude Nexus
 directories:
   output: dist
+files:
+  - "**/*"
+  - "!docs/**"
+  - "!scripts/**"
+extraResources:
+  - from: scripts/
+    to: scripts/
 win:
   target: [nsis, portable]
 nsis:
   oneClick: false
   allowToCurrentUser: true
+  runAfterFinish: true
+  include: scripts/register-shell.js
