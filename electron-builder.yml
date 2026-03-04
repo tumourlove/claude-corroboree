@@ -17,8 +17,9 @@ publish:
   repo: claude-nexus
 win:
   target: [nsis, portable]
+  signAndEditExecutable: false
 nsis:
   oneClick: false
-  allowToCurrentUser: true
+  perMachine: false
+  allowElevation: false
   runAfterFinish: true
-  include: scripts/register-shell.js

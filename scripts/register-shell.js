@@ -30,12 +30,17 @@ if (process.resourcesPath) {
 
 const escapedExe = exePath.replace(/\\/g, '\\\\');
 
+// Use the exe as the icon source (contains embedded icon)
+const iconPath = process.resourcesPath ? escapedExe : '';
+
 const regCommands = [
   // Right-click on folder
   `reg add "HKCU\\Software\\Classes\\Directory\\shell\\ClaudeNexus" /ve /d "Open in Claude Nexus" /f`,
+  ...(iconPath ? [`reg add "HKCU\\Software\\Classes\\Directory\\shell\\ClaudeNexus" /v Icon /d "\\"${iconPath}\\"" /f`] : []),
   `reg add "HKCU\\Software\\Classes\\Directory\\shell\\ClaudeNexus\\command" /ve /d "\\"${escapedExe}\\" \\"%V\\"" /f`,
   // Right-click on folder background
   `reg add "HKCU\\Software\\Classes\\Directory\\Background\\shell\\ClaudeNexus" /ve /d "Open in Claude Nexus" /f`,
+  ...(iconPath ? [`reg add "HKCU\\Software\\Classes\\Directory\\Background\\shell\\ClaudeNexus" /v Icon /d "\\"${iconPath}\\"" /f`] : []),
   `reg add "HKCU\\Software\\Classes\\Directory\\Background\\shell\\ClaudeNexus\\command" /ve /d "\\"${escapedExe}\\" \\"%V\\"" /f`,
   // App Path — lets you type "nexus" in Win+R or Explorer address bar
   `reg add "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\nexus.cmd" /ve /d "${escapedExe}" /f`,

@@ -228,9 +228,34 @@ ipcMain.handle('updater:download', () => autoUpdater.downloadUpdate().catch(() =
 ipcMain.handle('updater:install', () => autoUpdater.quitAndInstall());
 ipcMain.handle('updater:get-version', () => app.getVersion());
 
+// Register shell integration on first launch of packaged build
+function registerShellIfNeeded() {
+  if (!app.isPackaged) return;
+  const flagPath = path.join(os.homedir(), '.claude-nexus', 'shell-registered-version');
+  const currentVersion = app.getVersion();
+  try {
+    const registered = fs.readFileSync(flagPath, 'utf8').trim();
+    if (registered === currentVersion) return; // already registered for this version
+  } catch { /* not registered yet */ }
+
+  try {
+    const scriptPath = path.join(process.resourcesPath, 'scripts', 'register-shell.js');
+    require('child_process').execFileSync(process.execPath, [scriptPath], {
+      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      stdio: 'ignore',
+    });
+    fs.mkdirSync(path.dirname(flagPath), { recursive: true });
+    fs.writeFileSync(flagPath, currentVersion);
+    console.log('Shell integration registered for v' + currentVersion);
+  } catch (e) {
+    console.error('Failed to register shell:', e.message);
+  }
+}
+
 app.whenReady().then(() => {
   createWindow();
   setupAutoUpdater();
+  registerShellIfNeeded();
 });
 app.on('window-all-closed', () => {
   if (ipcServer) ipcServer.stop();
