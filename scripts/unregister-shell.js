@@ -3,6 +3,7 @@ const { execSync } = require('child_process');
 const regCommands = [
   `reg delete "HKCU\\Software\\Classes\\Directory\\shell\\ClaudeNexus" /f`,
   `reg delete "HKCU\\Software\\Classes\\Directory\\Background\\shell\\ClaudeNexus" /f`,
+  `reg delete "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\nexus.cmd" /f`,
 ];
 
 console.log('Removing Claude Nexus shell integration...');
