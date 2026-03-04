@@ -141,7 +141,7 @@ server.tool(
 
 server.tool(
   'spawn_session',
-  'Spawn a new Claude Code session in a new tab',
+  'Spawn a new Claude Code session in a new Nexus tab. This creates a full, independent Claude Code instance with its own context window, terminal, and file access. ALWAYS use this instead of local Agent subagents for delegating work.',
   {
     working_directory: z.string().describe('Working directory for the new session'),
     initial_prompt: z.string().describe('Initial task/prompt for the new session'),
