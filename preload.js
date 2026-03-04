@@ -10,5 +10,6 @@ contextBridge.exposeInMainWorld('nexus', {
   onSessionExited: (callback) => ipcRenderer.on('session:exited', (_e, data) => callback(data)),
   onSessionCreated: (callback) => ipcRenderer.on('session:created', (_e, data) => callback(data)),
   onSessionStatus: (callback) => ipcRenderer.on('session:status', (_e, data) => callback(data)),
+  onSpawnRequested: (callback) => ipcRenderer.on('session:spawn-requested', (_e, data) => callback(data)),
   listSessions: () => ipcRenderer.invoke('session:list'),
 });

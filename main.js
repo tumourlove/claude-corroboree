@@ -1,9 +1,16 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const { SessionManager } = require('./src/session-manager');
+const { IpcServer } = require('./src/ipc-server');
+const { Scratchpad } = require('./src/scratchpad');
+const { HistoryManager } = require('./src/history-manager');
 
 let mainWindow;
 let sessionManager;
+let ipcServer;
+let scratchpad;
+let historyManager;
+let tabCounter = 0;
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -17,7 +24,31 @@ function createWindow() {
     },
   });
   mainWindow.loadFile('index.html');
+
   sessionManager = new SessionManager(mainWindow);
+  scratchpad = new Scratchpad();
+  historyManager = new HistoryManager();
+
+  // Capture terminal output for history
+  sessionManager.onOutput = (id, data) => {
+    historyManager.appendOutput(id, data);
+  };
+
+  ipcServer = new IpcServer({
+    sessionManager,
+    scratchpad,
+    historyManager,
+    onSpawnRequest: ({ cwd, initialPrompt, label, template, requestedBy }) => {
+      tabCounter++;
+      const id = `tab-${tabCounter}`;
+      // Tell renderer to create the tab
+      mainWindow.webContents.send('session:spawn-requested', {
+        id, label, cwd, initialPrompt, template,
+      });
+    },
+  });
+
+  ipcServer.start();
 }
 
 ipcMain.on('session:create', (_event, { id, label, cwd, initialPrompt, template, isLead }) => {
@@ -36,12 +67,11 @@ ipcMain.on('terminal:resize', (_event, { id, cols, rows }) => {
   sessionManager.resizeSession(id, cols, rows);
 });
 
-ipcMain.handle('session:list', () => {
-  return sessionManager.listSessions();
-});
+ipcMain.handle('session:list', () => sessionManager.listSessions());
 
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => {
+  if (ipcServer) ipcServer.stop();
   if (sessionManager) sessionManager.destroy();
   app.quit();
 });

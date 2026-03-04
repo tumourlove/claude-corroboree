@@ -47,8 +47,18 @@ window.nexus.onSessionExited(({ id }) => {
   tabManager.updateTabStatus(id, 'exited');
 });
 
-// Create first tab
-tabManager.createTab('Lead');
+// Handle session status updates
+window.nexus.onSessionStatus(({ id, status }) => {
+  tabManager.updateTabStatus(id, status);
+});
+
+// Handle MCP-initiated session spawns
+window.nexus.onSpawnRequested(({ id, label, cwd, initialPrompt, template }) => {
+  tabManager.createTab(label || 'Worker', { id, cwd, initialPrompt, template });
+});
+
+// Create first tab as lead session
+tabManager.createTab('Lead', { isLead: true });
 
 // Update session count
 function updateStatusBar() {

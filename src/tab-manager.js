@@ -10,8 +10,8 @@ export class TabManager {
     this.nextId = 1;
   }
 
-  createTab(label = 'Session') {
-    const id = `tab-${this.nextId++}`;
+  createTab(label = 'Session', options = {}) {
+    const id = options.id || `tab-${this.nextId++}`;
 
     // Terminal element
     const termEl = document.createElement('div');
@@ -64,7 +64,12 @@ export class TabManager {
     this.activateTab(id);
 
     // Tell main process to spawn PTY
-    window.nexus.createSession(id, label);
+    window.nexus.createSession(id, label, {
+      cwd: options.cwd,
+      initialPrompt: options.initialPrompt,
+      template: options.template,
+      isLead: options.isLead,
+    });
 
     return id;
   }
