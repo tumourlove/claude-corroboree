@@ -329,10 +329,12 @@ Do NOT spawn additional sessions — that is the lead's job. Complete your task 
     // Use the bundled MCP server (single file, no external deps)
     // In packaged builds it's in resources/mcp-server.js (via extraResources)
     // In dev it's in dist/mcp-server.js (built by esbuild)
-    let serverScript = path.join(__dirname, '..', 'dist', 'mcp-server.js');
-    if (!fs.existsSync(serverScript)) {
-      // Packaged build: check extraResources location
-      serverScript = path.join(process.resourcesPath || path.join(__dirname, '..'), 'mcp-server.js');
+    const isPackaged = __dirname.includes('app.asar');
+    let serverScript;
+    if (isPackaged) {
+      serverScript = path.join(process.resourcesPath, 'mcp-server.js');
+    } else {
+      serverScript = path.join(__dirname, '..', 'dist', 'mcp-server.js');
     }
     return {
       mcpServers: {
