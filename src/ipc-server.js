@@ -12,6 +12,8 @@ class IpcServer {
     this.onSpawnRequest = onSpawnRequest;
     this.clients = new Map(); // sessionId -> socket
     this.server = null;
+    this.results = new Map(); // sessionId -> { result, status, timestamp }
+    this.spawnedWorkers = new Set(); // track worker session IDs
   }
 
   getIpcPath() {
@@ -114,6 +116,20 @@ class IpcServer {
       }
 
       case 'report_result': {
+        // Store result
+        this.results.set(msg.sessionId, {
+          result: msg.result,
+          status: msg.status,
+          timestamp: Date.now(),
+        });
+
+        // Store in scratchpad for persistence
+        this.scratchpad.set(msg.sessionId, JSON.stringify({
+          result: msg.result,
+          status: msg.status,
+          timestamp: Date.now(),
+        }), '_results');
+
         // Forward to lead session
         for (const [id, s] of this.clients) {
           const session = this.sessionManager.getSessionInfo(id);
@@ -125,6 +141,30 @@ class IpcServer {
               priority: 'urgent',
             });
           }
+        }
+
+        // Notify renderer of result
+        if (this.sessionManager.mainWindow) {
+          this.sessionManager.mainWindow.webContents.send('session:result', {
+            id: msg.sessionId,
+            result: msg.result,
+            status: msg.status,
+            timestamp: Date.now(),
+          });
+        }
+
+        // Check if all workers complete
+        this.spawnedWorkers.add(msg.sessionId);
+        const allSessions = this.sessionManager.listSessions();
+        const workers = allSessions.filter(s => !s.isLead);
+        const allDone = workers.length > 0 && workers.every(w => this.results.has(w.id));
+        if (allDone && workers.length > 0) {
+          const allResults = workers.map(w => ({
+            id: w.id,
+            label: w.label,
+            ...this.results.get(w.id),
+          }));
+          this.sessionManager.mainWindow.webContents.send('workers:all-complete', { results: allResults });
         }
         break;
       }
@@ -166,6 +206,16 @@ class IpcServer {
       case 'save_checkpoint': {
         const filepath = this.historyManager.saveToFile(msg.sessionId, msg.label || 'checkpoint');
         this._reply(socket, { type: 'checkpoint_saved', filepath });
+        break;
+      }
+
+      case 'get_results': {
+        const results = [];
+        for (const [id, r] of this.results) {
+          const session = this.sessionManager.getSessionInfo(id);
+          results.push({ id, label: session?.label || id, ...r });
+        }
+        this._reply(socket, { type: 'results', results });
         break;
       }
 

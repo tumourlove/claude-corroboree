@@ -32,6 +32,8 @@ contextBridge.exposeInMainWorld('nexus', {
   updateClaude: () => ipcRenderer.invoke('app:update-claude'),
   onOutputPreview: (cb) => ipcRenderer.on('session:output-preview', (_e, d) => cb(d)),
   onStuckWarning: (cb) => ipcRenderer.on('session:stuck-warning', (_e, d) => cb(d)),
+  onSessionResult: (cb) => ipcRenderer.on('session:result', (_e, d) => cb(d)),
+  onAllWorkersComplete: (cb) => ipcRenderer.on('workers:all-complete', (_e, d) => cb(d)),
 
   // Auto-updater
   checkForUpdates: () => ipcRenderer.invoke('updater:check'),
