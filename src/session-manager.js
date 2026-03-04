@@ -76,6 +76,7 @@ class SessionManager {
       worktree: worktreeInfo,
       createdAt: Date.now(),
       lastOutputAt: Date.now(),
+      initialPrompt: initialPrompt || null,
     };
 
     ptyProc.onData((data) => {
@@ -141,6 +142,7 @@ class SessionManager {
       status: session.status,
       isLead: session.isLead,
       createdAt: session.createdAt,
+      initialPrompt: session.initialPrompt,
     };
   }
 

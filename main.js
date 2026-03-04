@@ -91,6 +91,59 @@ ipcMain.handle('session:history', (_event, { id, lines }) => {
   return historyManager.getRecentOutput(id, lines || 100);
 });
 
+ipcMain.on('session:cancel', (_event, { id }) => {
+  sessionManager.writeToSession(id, '\x03'); // SIGINT
+});
+
+ipcMain.on('session:restart', (_event, { id }) => {
+  const info = sessionManager.getSessionInfo(id);
+  if (!info) return;
+  sessionManager.closeSession(id);
+  // Small delay so the old session fully cleans up
+  setTimeout(() => {
+    sessionManager.createSession(id, {
+      label: info.label,
+      cwd: info.cwd,
+      template: info.template,
+      isLead: info.isLead,
+    });
+  }, 500);
+});
+
+ipcMain.on('session:send-quick-message', (_event, { id, text }) => {
+  if (ipcServer) {
+    ipcServer.sendToSession(id, {
+      type: 'message',
+      from: 'user',
+      message: text,
+      priority: 'normal',
+    });
+  }
+});
+
+ipcMain.on('session:broadcast-message', (_event, { text }) => {
+  if (ipcServer) {
+    for (const [sid, socket] of ipcServer.clients) {
+      ipcServer._reply(socket, {
+        type: 'message',
+        from: 'user',
+        message: text,
+        priority: 'normal',
+      });
+    }
+  }
+});
+
+ipcMain.handle('app:update-claude', async () => {
+  const { execSync } = require('child_process');
+  try {
+    const output = execSync('claude update', { encoding: 'utf8', timeout: 30000 });
+    return { success: true, output };
+  } catch (e) {
+    return { success: false, output: e.message };
+  }
+});
+
 ipcMain.handle('dialog:open-folder', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory'],

@@ -24,6 +24,15 @@ contextBridge.exposeInMainWorld('nexus', {
   getStartupCwd: () => ipcRenderer.invoke('app:startup-cwd'),
   listSessions: () => ipcRenderer.invoke('session:list'),
 
+  // Session controls
+  cancelSession: (id) => ipcRenderer.send('session:cancel', { id }),
+  restartSession: (id) => ipcRenderer.send('session:restart', { id }),
+  sendQuickMessage: (id, text) => ipcRenderer.send('session:send-quick-message', { id, text }),
+  broadcastMessage: (text) => ipcRenderer.send('session:broadcast-message', { text }),
+  updateClaude: () => ipcRenderer.invoke('app:update-claude'),
+  onOutputPreview: (cb) => ipcRenderer.on('session:output-preview', (_e, d) => cb(d)),
+  onStuckWarning: (cb) => ipcRenderer.on('session:stuck-warning', (_e, d) => cb(d)),
+
   // Auto-updater
   checkForUpdates: () => ipcRenderer.invoke('updater:check'),
   downloadUpdate: () => ipcRenderer.invoke('updater:download'),

@@ -214,6 +214,11 @@ class IpcServer {
     return currentSessionId;
   }
 
+  sendToSession(sessionId, data) {
+    const socket = this.clients.get(sessionId);
+    if (socket) this._reply(socket, data);
+  }
+
   _reply(socket, data) {
     try {
       socket.write(JSON.stringify(data) + '\n');
