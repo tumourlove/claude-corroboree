@@ -197,12 +197,17 @@ window.addEventListener('nexus:focus-tab', (e) => {
   tabManager.activateTab(e.detail.id);
 });
 
-// Refresh dashboard with current sessions (event-driven, not polling)
-async function refreshDashboard() {
-  const dash = tabManager.getDashboard();
-  if (!dash) return;
-  const sessions = await window.nexus.listSessions();
-  dash.updateSessions(sessions);
+// Refresh dashboard with current sessions (debounced to avoid rapid IPC/DOM churn)
+let _refreshTimer = null;
+function refreshDashboard() {
+  if (_refreshTimer) return;
+  _refreshTimer = setTimeout(async () => {
+    _refreshTimer = null;
+    const dash = tabManager.getDashboard();
+    if (!dash) return;
+    const sessions = await window.nexus.listSessions();
+    dash.updateSessions(sessions);
+  }, 200);
 }
 
 // Also refresh when sessions are created/exited

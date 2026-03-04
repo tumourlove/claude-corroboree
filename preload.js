@@ -1,5 +1,12 @@
 const { contextBridge, ipcRenderer, clipboard, nativeImage, shell } = require('electron');
 
+// Helper: register listener and return unsubscribe function
+function onIpc(channel, cb) {
+  const handler = (_e, d) => cb(d);
+  ipcRenderer.on(channel, handler);
+  return () => ipcRenderer.removeListener(channel, handler);
+}
+
 contextBridge.exposeInMainWorld('nexus', {
   // Clipboard
   clipboardReadText: () => clipboard.readText(),
@@ -30,12 +37,12 @@ contextBridge.exposeInMainWorld('nexus', {
   sendQuickMessage: (id, text) => ipcRenderer.send('session:send-quick-message', { id, text }),
   broadcastMessage: (text) => ipcRenderer.send('session:broadcast-message', { text }),
   updateClaude: () => ipcRenderer.invoke('app:update-claude'),
-  onOutputPreview: (cb) => ipcRenderer.on('session:output-preview', (_e, d) => cb(d)),
-  onStuckWarning: (cb) => ipcRenderer.on('session:stuck-warning', (_e, d) => cb(d)),
-  onSessionResult: (cb) => ipcRenderer.on('session:result', (_e, d) => cb(d)),
-  onAllWorkersComplete: (cb) => ipcRenderer.on('workers:all-complete', (_e, d) => cb(d)),
+  onOutputPreview: (cb) => onIpc('session:output-preview', cb),
+  onStuckWarning: (cb) => onIpc('session:stuck-warning', cb),
+  onSessionResult: (cb) => onIpc('session:result', cb),
+  onAllWorkersComplete: (cb) => onIpc('workers:all-complete', cb),
   retrySession: (id, originalInfo) => ipcRenderer.send('session:retry', { id, originalInfo }),
-  onRetryAvailable: (cb) => ipcRenderer.on('session:retry-available', (_e, d) => cb(d)),
+  onRetryAvailable: (cb) => onIpc('session:retry-available', cb),
 
   // Auto-updater
   checkForUpdates: () => ipcRenderer.invoke('updater:check'),

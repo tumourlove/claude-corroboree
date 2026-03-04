@@ -52,6 +52,13 @@ export class Dashboard {
     this.container.querySelector('#dash-update-nexus-btn').addEventListener('click', () => {
       window.nexus.checkForUpdates();
     });
+
+    // Event delegation for card action buttons (bound once, survives DOM rebuilds)
+    this.container.querySelector('#dash-cards').addEventListener('click', (e) => {
+      const btn = e.target.closest('.dash-card-btn');
+      if (!btn) return;
+      this._handleCardAction(btn.dataset.action, btn.dataset.id);
+    });
   }
 
   updateSessions(sessions) {
@@ -81,15 +88,6 @@ export class Dashboard {
         </div>
       `;
     }).join('');
-
-    // Bind card action buttons
-    el.querySelectorAll('.dash-card-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        const action = e.target.dataset.action;
-        const id = e.target.dataset.id;
-        this._handleCardAction(action, id);
-      });
-    });
   }
 
   _handleCardAction(action, id) {
@@ -123,6 +121,7 @@ export class Dashboard {
 
   addResult(result) {
     this.results.push(result);
+    if (this.results.length > 200) this.results.shift();
     const panel = this.container.querySelector('#dash-results');
     panel.style.display = 'block';
     const list = this.container.querySelector('#dash-results-list');
@@ -136,6 +135,7 @@ export class Dashboard {
       <span class="dash-result-time">${time}</span>
     `;
     list.appendChild(entry);
+    while (list.children.length > 200) list.removeChild(list.firstChild);
   }
 
   addLogEntry(message) {
@@ -163,6 +163,8 @@ export class Dashboard {
   }
 
   dispose() {
+    this.previews.clear();
+    this.results.length = 0;
     this.container.innerHTML = '';
   }
 }

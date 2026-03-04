@@ -176,6 +176,9 @@ class SessionManager {
     const now = Date.now();
     for (const [id, session] of this.sessions) {
       if (session.status === 'working' && (now - session.lastOutputAt) > this.stuckThresholdMs) {
+        // Rate-limit: at most one stuck warning per 5 minutes per session
+        if (session._lastStuckWarning && (now - session._lastStuckWarning) < 300000) continue;
+        session._lastStuckWarning = now;
         this.updateStatus(id, 'stuck');
         this.mainWindow.webContents.send('session:stuck-warning', {
           id,
@@ -186,8 +189,12 @@ class SessionManager {
   }
 
   _emitPreview(id, data) {
-    // Strip ANSI codes for clean preview text
-    const clean = data.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '').replace(/\r/g, '');
+    // Strip ANSI codes for clean preview text (CSI, OSC, and single-char escapes)
+    const clean = data
+      .replace(/\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)/g, '')  // OSC sequences
+      .replace(/\x1b\[[0-9;?]*[a-zA-Z]/g, '')               // CSI sequences
+      .replace(/\x1b[^[\]]/g, '')                             // other escape sequences
+      .replace(/\r/g, '');
     const session = this.sessions.get(id);
     if (!session) return;
     if (!session._previewBuffer) session._previewBuffer = '';
@@ -302,6 +309,8 @@ You are a WORKER session. You were spawned to handle a specific task. Focus on y
   _cleanup(id) {
     const session = this.sessions.get(id);
     if (session) {
+      // Clear pending preview timer to prevent leaked closure
+      if (session._previewTimer) clearTimeout(session._previewTimer);
       // Remove temp MCP config
       try { fs.unlinkSync(session.mcpConfigPath); } catch (e) { /* ignore */ }
       // Clean up worktree if one was created

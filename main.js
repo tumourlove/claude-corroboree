@@ -134,14 +134,14 @@ ipcMain.on('session:broadcast-message', (_event, { text }) => {
   }
 });
 
-ipcMain.handle('app:update-claude', async () => {
-  const { execSync } = require('child_process');
-  try {
-    const output = execSync('claude update', { encoding: 'utf8', timeout: 30000 });
-    return { success: true, output };
-  } catch (e) {
-    return { success: false, output: e.message };
-  }
+ipcMain.handle('app:update-claude', () => {
+  const { exec } = require('child_process');
+  return new Promise((resolve) => {
+    exec('claude update', { encoding: 'utf8', timeout: 30000 }, (err, stdout) => {
+      if (err) resolve({ success: false, output: err.message });
+      else resolve({ success: true, output: stdout });
+    });
+  });
 });
 
 ipcMain.on('session:retry', (_event, { id, originalInfo }) => {

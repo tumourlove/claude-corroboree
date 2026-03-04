@@ -165,6 +165,9 @@ class IpcServer {
             ...this.results.get(w.id),
           }));
           this.sessionManager.mainWindow.webContents.send('workers:all-complete', { results: allResults });
+          // Clear completed batch to free memory
+          this.results.clear();
+          this.spawnedWorkers.clear();
         }
         break;
       }
