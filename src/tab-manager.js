@@ -1,25 +1,54 @@
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
+import { Dashboard } from './dashboard';
 
 export class TabManager {
   constructor(containerEl, tabBarEl) {
     this.container = containerEl;
     this.tabBar = tabBarEl;
-    this.tabs = new Map(); // id -> { term, fitAddon, termEl, tabEl, label }
+    this.tabs = new Map(); // id -> { term?, fitAddon?, termEl, tabEl, label, type, dashboard? }
     this.activeTabId = null;
     this.nextId = 1;
   }
 
   createTab(label = 'Session', options = {}) {
     const id = options.id || `tab-${this.nextId++}`;
+    const type = options.type || 'terminal';
 
-    // Terminal element
+    // Pane element
     const termEl = document.createElement('div');
-    termEl.className = 'terminal-pane';
+    termEl.className = type === 'dashboard' ? 'dashboard-pane' : 'terminal-pane';
     termEl.style.display = 'none';
     this.container.appendChild(termEl);
 
-    // xterm instance
+    // Tab bar button
+    const tabEl = document.createElement('div');
+    tabEl.className = 'tab';
+    tabEl.dataset.tabId = id;
+    tabEl.innerHTML = `
+      <span class="tab-status${type === 'dashboard' ? ' status-dashboard' : ''}"></span>
+      <span class="tab-label">${label}</span>
+      <span class="tab-close">&times;</span>
+    `;
+    tabEl.addEventListener('click', (e) => {
+      if (e.target.classList.contains('tab-close')) {
+        this.closeTab(id);
+      } else {
+        this.activateTab(id);
+      }
+    });
+
+    const addBtn = this.tabBar.querySelector('.tab-add');
+    this.tabBar.insertBefore(tabEl, addBtn);
+
+    if (type === 'dashboard') {
+      const dashboard = new Dashboard(termEl);
+      this.tabs.set(id, { termEl, tabEl, label, type, dashboard });
+      this.activateTab(id);
+      return id;
+    }
+
+    // Terminal tab
     const term = new Terminal({
       cursorBlink: true,
       fontSize: 14,
@@ -35,35 +64,12 @@ export class TabManager {
     term.loadAddon(fitAddon);
     term.open(termEl);
 
-    // Tab bar button
-    const tabEl = document.createElement('div');
-    tabEl.className = 'tab';
-    tabEl.dataset.tabId = id;
-    tabEl.innerHTML = `
-      <span class="tab-status"></span>
-      <span class="tab-label">${label}</span>
-      <span class="tab-close">&times;</span>
-    `;
-    tabEl.addEventListener('click', (e) => {
-      if (e.target.classList.contains('tab-close')) {
-        this.closeTab(id);
-      } else {
-        this.activateTab(id);
-      }
-    });
-
-    // Insert before the + button
-    const addBtn = this.tabBar.querySelector('.tab-add');
-    this.tabBar.insertBefore(tabEl, addBtn);
-
-    // Wire up terminal I/O
     term.onData((data) => window.nexus.terminalWrite(id, data));
     window.nexus.onTerminalData(id, (data) => term.write(data));
 
-    this.tabs.set(id, { term, fitAddon, termEl, tabEl, label });
+    this.tabs.set(id, { term, fitAddon, termEl, tabEl, label, type });
     this.activateTab(id);
 
-    // Tell main process to spawn PTY
     window.nexus.createSession(id, label, {
       cwd: options.cwd,
       initialPrompt: options.initialPrompt,
@@ -78,30 +84,37 @@ export class TabManager {
     const tab = this.tabs.get(id);
     if (!tab) return;
 
-    // Hide all terminals, show selected
     for (const [tid, t] of this.tabs) {
       t.termEl.style.display = tid === id ? 'block' : 'none';
       t.tabEl.classList.toggle('active', tid === id);
     }
 
     this.activeTabId = id;
-    tab.fitAddon.fit();
-    tab.term.focus();
-    window.nexus.resizeTerminal(id, tab.term.cols, tab.term.rows);
+
+    if (tab.type === 'terminal' && tab.fitAddon) {
+      tab.fitAddon.fit();
+      tab.term.focus();
+      window.nexus.resizeTerminal(id, tab.term.cols, tab.term.rows);
+    }
   }
 
   closeTab(id) {
     const tab = this.tabs.get(id);
     if (!tab) return;
 
-    tab.term.dispose();
+    if (tab.type === 'dashboard' && tab.dashboard) {
+      tab.dashboard.dispose();
+    } else if (tab.term) {
+      tab.term.dispose();
+    }
     tab.termEl.remove();
     tab.tabEl.remove();
     this.tabs.delete(id);
 
-    window.nexus.closeSession(id);
+    if (tab.type === 'terminal') {
+      window.nexus.closeSession(id);
+    }
 
-    // Activate another tab if this was active
     if (this.activeTabId === id) {
       const remaining = [...this.tabs.keys()];
       if (remaining.length > 0) {
@@ -113,7 +126,7 @@ export class TabManager {
   handleResize() {
     if (this.activeTabId) {
       const tab = this.tabs.get(this.activeTabId);
-      if (tab) {
+      if (tab && tab.type === 'terminal' && tab.fitAddon) {
         tab.fitAddon.fit();
         window.nexus.resizeTerminal(this.activeTabId, tab.term.cols, tab.term.rows);
       }
@@ -132,5 +145,12 @@ export class TabManager {
     if (!tab) return;
     tab.label = label;
     tab.tabEl.querySelector('.tab-label').textContent = label;
+  }
+
+  getDashboard() {
+    for (const [, tab] of this.tabs) {
+      if (tab.type === 'dashboard') return tab.dashboard;
+    }
+    return null;
   }
 }

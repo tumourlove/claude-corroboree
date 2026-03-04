@@ -29,6 +29,16 @@ document.addEventListener('keydown', (e) => {
       : (idx + 1) % ids.length;
     tabManager.activateTab(ids[next]);
   }
+  // Ctrl+D toggle dashboard
+  if (e.ctrlKey && e.key === 'd') {
+    e.preventDefault();
+    const existing = [...tabManager.tabs.entries()].find(([, t]) => t.type === 'dashboard');
+    if (existing) {
+      tabManager.activateTab(existing[0]);
+    } else {
+      tabManager.createTab('Dashboard', { type: 'dashboard' });
+    }
+  }
   // Ctrl+1-9 jump to tab
   if (e.ctrlKey && e.key >= '1' && e.key <= '9') {
     e.preventDefault();
