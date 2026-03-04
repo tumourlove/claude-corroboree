@@ -40,6 +40,16 @@ document.addEventListener('keydown', (e) => {
       tabManager.createTab('Dashboard', { type: 'dashboard' });
     }
   }
+  // Ctrl+H toggle history
+  if (e.ctrlKey && e.key === 'h') {
+    e.preventDefault();
+    const existing = [...tabManager.tabs.entries()].find(([, t]) => t.type === 'history');
+    if (existing) {
+      tabManager.activateTab(existing[0]);
+    } else {
+      tabManager.createTab('History', { type: 'history' });
+    }
+  }
   // Ctrl+1-9 jump to tab
   if (e.ctrlKey && e.key >= '1' && e.key <= '9') {
     e.preventDefault();

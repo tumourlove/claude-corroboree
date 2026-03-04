@@ -1,6 +1,7 @@
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { Dashboard } from './dashboard';
+import { HistoryPanel } from './history-panel';
 
 export class TabManager {
   constructor(containerEl, tabBarEl) {
@@ -44,6 +45,13 @@ export class TabManager {
     if (type === 'dashboard') {
       const dashboard = new Dashboard(termEl);
       this.tabs.set(id, { termEl, tabEl, label, type, dashboard });
+      this.activateTab(id);
+      return id;
+    }
+
+    if (type === 'history') {
+      const historyPanel = new HistoryPanel(termEl);
+      this.tabs.set(id, { termEl, tabEl, label, type, historyPanel });
       this.activateTab(id);
       return id;
     }
@@ -104,6 +112,8 @@ export class TabManager {
 
     if (tab.type === 'dashboard' && tab.dashboard) {
       tab.dashboard.dispose();
+    } else if (tab.type === 'history' && tab.historyPanel) {
+      tab.historyPanel.dispose();
     } else if (tab.term) {
       tab.term.dispose();
     }

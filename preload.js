@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('nexus', {
   onSessionStatus: (callback) => ipcRenderer.on('session:status', (_e, data) => callback(data)),
   onSpawnRequested: (callback) => ipcRenderer.on('session:spawn-requested', (_e, data) => callback(data)),
   onToast: (callback) => ipcRenderer.on('notification:toast', (_e, data) => callback(data)),
+  getSessionHistory: (id, lines) => ipcRenderer.invoke('session:history', { id, lines }),
   browseForFolder: () => ipcRenderer.invoke('dialog:open-folder'),
   getStartupCwd: () => ipcRenderer.invoke('app:startup-cwd'),
   listSessions: () => ipcRenderer.invoke('session:list'),

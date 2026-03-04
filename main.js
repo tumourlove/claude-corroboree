@@ -76,6 +76,10 @@ ipcMain.on('terminal:resize', (_event, { id, cols, rows }) => {
 
 ipcMain.handle('session:list', () => sessionManager.listSessions());
 
+ipcMain.handle('session:history', (_event, { id, lines }) => {
+  return historyManager.getRecentOutput(id, lines || 100);
+});
+
 ipcMain.handle('dialog:open-folder', async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory'],
