@@ -111,6 +111,7 @@ window.nexus.onSessionExited(({ id }) => {
 // Handle session status updates
 window.nexus.onSessionStatus(({ id, status }) => {
   tabManager.updateTabStatus(id, status);
+  refreshDashboard();
 });
 
 // Handle MCP-initiated session spawns
@@ -147,6 +148,58 @@ window.nexus.onToast(({ title, body, type }) => {
     toast.addEventListener('transitionend', () => toast.remove());
   }, 4000);
 });
+
+// --- Dashboard event-driven updates ---
+
+// Output previews -> dashboard cards
+window.nexus.onOutputPreview(({ id, lines }) => {
+  const dash = tabManager.getDashboard();
+  if (dash) dash.updatePreview(id, lines);
+});
+
+// Stuck warnings -> dashboard + notification
+window.nexus.onStuckWarning(({ id, lastOutputAge }) => {
+  const dash = tabManager.getDashboard();
+  if (dash) dash.addLogEntry(`\u26a0 Session ${id} appears stuck (no output for ${lastOutputAge}s)`);
+  tabManager.incrementBadge(id);
+});
+
+// Worker results -> dashboard results panel + badge on lead
+window.nexus.onSessionResult(({ id, result, status, timestamp }) => {
+  const dash = tabManager.getDashboard();
+  if (dash) {
+    const label = [...tabManager.tabs.values()].find(t => t.tabEl?.dataset?.tabId === id)?.label || id;
+    dash.addResult({ id, label, result, status, timestamp });
+    dash.addLogEntry(`Result from ${label}: ${status}`);
+  }
+  // Badge the lead tab
+  for (const [tid, t] of tabManager.tabs) {
+    if (t.label === 'Lead') tabManager.incrementBadge(tid);
+  }
+});
+
+// All workers done -> notification
+window.nexus.onAllWorkersComplete(({ results }) => {
+  const dash = tabManager.getDashboard();
+  if (dash) dash.addLogEntry(`\u2713 All ${results.length} workers complete!`);
+});
+
+// Focus tab from dashboard
+window.addEventListener('nexus:focus-tab', (e) => {
+  tabManager.activateTab(e.detail.id);
+});
+
+// Refresh dashboard with current sessions (event-driven, not polling)
+async function refreshDashboard() {
+  const dash = tabManager.getDashboard();
+  if (!dash) return;
+  const sessions = await window.nexus.listSessions();
+  dash.updateSessions(sessions);
+}
+
+// Also refresh when sessions are created/exited
+window.nexus.onSessionCreated(() => refreshDashboard());
+window.nexus.onSessionExited(() => refreshDashboard());
 
 // Update session count
 function updateStatusBar() {
