@@ -1,0 +1,9 @@
+appId: com.claude-nexus.app
+productName: Claude Nexus
+directories:
+  output: dist
+win:
+  target: [nsis, portable]
+nsis:
+  oneClick: false
+  allowToCurrentUser: true
