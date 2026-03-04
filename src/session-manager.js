@@ -40,7 +40,10 @@ class SessionManager {
       args.push('--', initialPrompt);
     }
 
-    const ptyProc = pty.spawn('claude', args, {
+    // Resolve claude executable path — Electron may not inherit full shell PATH
+    const claudePath = this._findExecutable('claude');
+
+    const ptyProc = pty.spawn(claudePath, args, {
       name: 'xterm-256color',
       cols: 80,
       rows: 30,
@@ -123,6 +126,25 @@ class SessionManager {
     if (session) {
       session.status = status;
       this.mainWindow.webContents.send('session:status', { id, status });
+    }
+  }
+
+  _findExecutable(name) {
+    const { execSync } = require('child_process');
+    // Try common locations first
+    const commonPaths = [
+      path.join(os.homedir(), '.local', 'bin', name + (os.platform() === 'win32' ? '.exe' : '')),
+      path.join(os.homedir(), '.local', 'bin', name),
+    ];
+    for (const p of commonPaths) {
+      if (fs.existsSync(p)) return p;
+    }
+    // Fall back to shell resolution
+    try {
+      const cmd = os.platform() === 'win32' ? `where ${name}` : `which ${name}`;
+      return execSync(cmd, { encoding: 'utf8' }).trim().split('\n')[0];
+    } catch (e) {
+      return name; // hope it's in PATH at runtime
     }
   }
 
