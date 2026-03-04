@@ -1,3 +1,106 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
-html, body { width: 100%; height: 100%; background: #1a1a2e; overflow: hidden; }
-#terminal-container { width: 100%; height: 100%; }
+html, body { width: 100%; height: 100%; background: #1a1a2e; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+
+/* Tab Bar */
+#tab-bar {
+  display: flex;
+  align-items: center;
+  background: #16213e;
+  height: 36px;
+  padding: 0 4px;
+  -webkit-app-region: drag;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+#tab-bar::-webkit-scrollbar { height: 2px; }
+#tab-bar::-webkit-scrollbar-thumb { background: #e94560; border-radius: 1px; }
+
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  height: 28px;
+  background: #1a1a2e;
+  border-radius: 6px 6px 0 0;
+  color: #8888aa;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  -webkit-app-region: no-drag;
+  transition: background 0.15s, color 0.15s;
+  margin-right: 2px;
+}
+
+.tab:hover { background: #0f3460; color: #e0e0e0; }
+.tab.active { background: #1a1a2e; color: #e94560; border-top: 2px solid #e94560; }
+
+.tab-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #555;
+}
+.tab-status.status-idle { background: #888; }
+.tab-status.status-working { background: #4fc3f7; animation: pulse 1.5s infinite; }
+.tab-status.status-done { background: #66bb6a; }
+.tab-status.status-error { background: #ef5350; }
+.tab-status.status-explorer { background: #ab47bc; }
+.tab-status.status-exited { background: #555; }
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.tab-close {
+  font-size: 14px;
+  opacity: 0;
+  transition: opacity 0.15s;
+  cursor: pointer;
+}
+.tab:hover .tab-close { opacity: 0.6; }
+.tab-close:hover { opacity: 1 !important; color: #ef5350; }
+
+.tab-add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: #8888aa;
+  font-size: 18px;
+  cursor: pointer;
+  border-radius: 6px;
+  -webkit-app-region: no-drag;
+  transition: background 0.15s, color 0.15s;
+}
+.tab-add:hover { background: #0f3460; color: #e94560; }
+
+/* Terminal Container */
+#terminal-container {
+  width: 100%;
+  height: calc(100% - 36px - 24px); /* minus tab bar and status bar */
+  position: relative;
+}
+
+.terminal-pane {
+  width: 100%;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* Status Bar */
+#status-bar {
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  height: 24px;
+  background: #16213e;
+  color: #8888aa;
+  font-size: 11px;
+  border-top: 1px solid #0f3460;
+}

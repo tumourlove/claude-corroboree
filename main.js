@@ -4,7 +4,7 @@ const pty = require('node-pty');
 const path = require('path');
 
 let mainWindow;
-let ptyProcess;
+const sessions = new Map(); // id -> { pty, cwd }
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -17,40 +17,60 @@ function createWindow() {
       nodeIntegration: false,
     },
   });
-
   mainWindow.loadFile('index.html');
+}
 
+function spawnSession(id, cwd) {
   const shell = os.platform() === 'win32' ? 'powershell.exe' : 'bash';
-  const cwd = process.argv[2] || process.env.USERPROFILE || process.env.HOME;
+  const resolvedCwd = cwd || process.argv[2] || process.env.USERPROFILE || process.env.HOME;
 
-  ptyProcess = pty.spawn(shell, [], {
+  const ptyProc = pty.spawn(shell, [], {
     name: 'xterm-256color',
     cols: 80,
     rows: 30,
-    cwd,
+    cwd: resolvedCwd,
     env: process.env,
     useConpty: true,
   });
 
-  ptyProcess.onData((data) => {
-    mainWindow.webContents.send('terminal:data', data);
+  ptyProc.onData((data) => {
+    mainWindow.webContents.send(`terminal:data:${id}`, data);
   });
 
-  ptyProcess.onExit(({ exitCode }) => {
-    console.error(`PTY exited: ${exitCode}`);
+  ptyProc.onExit(({ exitCode }) => {
+    mainWindow.webContents.send('session:exited', { id, exitCode });
+    sessions.delete(id);
   });
+
+  sessions.set(id, { pty: ptyProc, cwd: resolvedCwd });
 }
 
-ipcMain.on('terminal:write', (_event, data) => {
-  ptyProcess.write(data);
+ipcMain.on('session:create', (_event, { id, label, cwd }) => {
+  spawnSession(id, cwd);
 });
 
-ipcMain.on('terminal:resize', (_event, { cols, rows }) => {
-  try { ptyProcess.resize(cols, rows); } catch (e) { /* ignore resize errors */ }
+ipcMain.on('session:close', (_event, { id }) => {
+  const session = sessions.get(id);
+  if (session) {
+    session.pty.kill();
+    sessions.delete(id);
+  }
+});
+
+ipcMain.on('terminal:write', (_event, { id, data }) => {
+  const session = sessions.get(id);
+  if (session) session.pty.write(data);
+});
+
+ipcMain.on('terminal:resize', (_event, { id, cols, rows }) => {
+  const session = sessions.get(id);
+  if (session) {
+    try { session.pty.resize(cols, rows); } catch (e) { /* ignore */ }
+  }
 });
 
 app.whenReady().then(createWindow);
 app.on('window-all-closed', () => {
-  if (ptyProcess) ptyProcess.kill();
+  for (const [, session] of sessions) session.pty.kill();
   app.quit();
 });
