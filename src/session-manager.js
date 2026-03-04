@@ -39,6 +39,11 @@ class SessionManager {
     // Build claude CLI args
     const args = ['--mcp-config', mcpConfigPath];
 
+    // Workers auto-accept permissions since the lead already authorized their task
+    if (!isLead) {
+      args.push('--dangerously-skip-permissions');
+    }
+
     // Inject Nexus awareness so Claude knows its capabilities
     const systemPrompt = this._buildSystemPrompt(id, template || (isLead ? 'lead' : 'implementer'));
     args.push('--append-system-prompt', systemPrompt);
