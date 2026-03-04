@@ -21,6 +21,7 @@ win:
   target: [nsis, portable]
   signAndEditExecutable: false
 nsis:
+  artifactName: "Claude-Nexus-Setup-${version}.${ext}"
   oneClick: false
   perMachine: false
   allowElevation: false
