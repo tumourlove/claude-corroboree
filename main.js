@@ -58,7 +58,7 @@ function createWindow() {
     conflictDetector,
     onSpawnRequest: ({ cwd, initialPrompt, label, template, requestedBy }) => {
       tabCounter++;
-      const id = `tab-${tabCounter}`;
+      const id = `worker-${tabCounter}`;
       // Tell renderer to create the tab
       mainWindow.webContents.send('session:spawn-requested', {
         id, label, cwd, initialPrompt, template,
