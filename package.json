@@ -1,11 +1,11 @@
 {
   "name": "claude-nexus",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Tabbed Electron terminal for parallel Claude Code sessions with MCP coordination",
   "main": "main.js",
   "scripts": {
     "start": "npm run bundle && electron .",
-    "bundle": "esbuild src/renderer.js --bundle --outfile=dist/renderer.js --platform=browser --format=iife --loader:.css=css",
+    "bundle": "esbuild src/renderer.js --bundle --outfile=dist/renderer.js --platform=browser --format=iife --loader:.css=css && esbuild mcp-server/index.js --bundle --outfile=dist/mcp-server.js --platform=node --format=cjs",
     "rebuild": "electron-rebuild",
     "build": "npm run bundle && electron-builder",
     "postinstall": "node scripts/patch-node-pty.js && electron-rebuild -f -w node-pty || echo 'electron-rebuild failed, continuing...'"

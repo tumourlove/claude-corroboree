@@ -8,9 +8,9 @@ files:
   - "!docs/**"
   - "!scripts/**"
   - "!release/**"
-asarUnpack:
-  - "mcp-server/**"
 extraResources:
+  - from: dist/mcp-server.js
+    to: mcp-server.js
   - from: scripts/
     to: scripts/
 publish:
