@@ -103,7 +103,27 @@ class IpcServer {
       }
 
       case 'spawn_session': {
-        if (this.onSpawnRequest) {
+        // Try to reuse an idle/done/stuck worker session before spawning a new tab
+        const allSessions = this.sessionManager.listSessions();
+        const reusable = allSessions.find(s =>
+          !s.isLead && (s.status === 'idle' || s.status === 'done' || s.status === 'stuck' || s.status === 'error')
+        );
+        if (reusable) {
+          // Respawn in-place — reuses the existing tab
+          this.sessionManager.respawnSession(reusable.id, {
+            label: msg.label || reusable.label,
+            cwd: msg.working_directory,
+            initialPrompt: msg.initial_prompt,
+            template: msg.template,
+          });
+          // Update tab label in renderer
+          if (this.sessionManager.mainWindow) {
+            this.sessionManager.mainWindow.webContents.send('session:relabeled', {
+              id: reusable.id,
+              label: msg.label || reusable.label,
+            });
+          }
+        } else if (this.onSpawnRequest) {
           this.onSpawnRequest({
             cwd: msg.working_directory,
             initialPrompt: msg.initial_prompt,

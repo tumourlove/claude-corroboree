@@ -138,6 +138,27 @@ class SessionManager {
     }
   }
 
+  respawnSession(id, { label, cwd, initialPrompt, template, cols, rows }) {
+    // Kill old PTY but keep the tab alive in the renderer
+    const oldSession = this.sessions.get(id);
+    if (oldSession) {
+      oldSession.pty.kill();
+      if (oldSession._previewTimer) clearTimeout(oldSession._previewTimer);
+      try { fs.unlinkSync(oldSession.mcpConfigPath); } catch (e) { /* ignore */ }
+      if (oldSession.worktree) this.worktreeManager.removeWorktree(id);
+      this.sessions.delete(id);
+    }
+    // Create a fresh session with the same tab ID
+    return this.createSession(id, {
+      label,
+      cwd: cwd || (oldSession && oldSession.cwd),
+      initialPrompt,
+      template: template || (oldSession && oldSession.template) || 'implementer',
+      cols: cols || 80,
+      rows: rows || 30,
+    });
+  }
+
   writeToSession(id, data) {
     const session = this.sessions.get(id);
     if (session) session.pty.write(data);
@@ -258,7 +279,7 @@ COMMUNICATION:
 - broadcast: Send a message to all sessions at once
 
 ORCHESTRATION:
-- spawn_session: Create a new worker session in a new tab with a specific task and working directory
+- spawn_session: Create or reuse a worker session. Idle/done/stuck workers are automatically recycled — no need to manually reset before spawning.
 - spawn_explorer: Spawn a read-only explorer session to analyze/cross-reference other sessions
 - get_session_status: Check if a session is idle, busy, or done
 - report_result: Report your task result back to the lead session

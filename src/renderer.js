@@ -119,6 +119,11 @@ window.nexus.onSpawnRequested(({ id, label, cwd, initialPrompt, template }) => {
   tabManager.createTab(label || 'Worker', { id, cwd, initialPrompt, template });
 });
 
+// Handle tab relabeling when a session is reused
+window.nexus.onSessionRelabeled(({ id, label }) => {
+  tabManager.updateTabLabel(id, label);
+});
+
 // Startup: check if a project dir was passed, otherwise show picker
 async function startup() {
   const startupCwd = await window.nexus.getStartupCwd();
