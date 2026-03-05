@@ -72,6 +72,7 @@ function createWindow() {
       mainWindow.webContents.send('session:spawn-requested', {
         id, label, cwd, initialPrompt, template,
       });
+      return id;
     },
   });
 

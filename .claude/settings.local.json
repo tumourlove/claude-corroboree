@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm init:*)",
+      "Bash(npm install:*)",
+      "Bash(npm:*)",
+      "Bash(npx electron-rebuild:*)",
+      "Bash(npx electron:*)",
+      "Bash(cmd:*)",
+      "Bash(cmd.exe:*)",
+      "Bash(node:*)",
+      "Bash(npx esbuild:*)",
+      "Bash(where claude:*)",
+      "Bash(gh repo:*)",
+      "Bash(rm:*)",
+      "Bash(ls:*)",
+      "Bash(gh release:*)",
+      "Bash(python3:*)",
+      "Bash(cp:*)",
+      "mcp__nexus-tab-1__scratchpad_set",
+      "mcp__nexus-tab-1__spawn_session",
+      "mcp__nexus-tab-1__wait_for_workers",
+      "mcp__nexus-tab-1__list_sessions",
+      "mcp__nexus-tab-1__read_messages",
+      "mcp__nexus-tab-1__list_worktrees",
+      "mcp__nexus-tab-1__stream_progress",
+      "mcp__nexus-tab-1__read_session_history",
+      "mcp__nexus-tab-1__merge_worker"
+    ]
+  }
+}
