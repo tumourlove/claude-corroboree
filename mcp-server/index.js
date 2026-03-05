@@ -18,17 +18,30 @@ const registry = new SessionRegistry();
 // Connect to main Electron process for shared state
 let ipcClient;
 let ipcBuffer = '';
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 20;
+const messageBuffer = [];
+const maxBufferSize = 100;
 
 function connectToMainProcess() {
+  reconnectAttempts++;
+
   ipcClient = net.createConnection(IPC_PATH, () => {
-    // Register this session
+    reconnectAttempts = 0;
     sendIpc({ type: 'register', sessionId: SESSION_ID });
+    // Flush buffered messages
+    while (messageBuffer.length > 0) {
+      const msg = messageBuffer.shift();
+      if (ipcClient && !ipcClient.destroyed) {
+        ipcClient.write(JSON.stringify(msg) + '\n');
+      }
+    }
   });
 
   ipcClient.on('data', (data) => {
     ipcBuffer += data.toString();
     const lines = ipcBuffer.split('\n');
-    ipcBuffer = lines.pop(); // keep incomplete trailing fragment
+    ipcBuffer = lines.pop();
 
     for (const line of lines) {
       if (!line.trim()) continue;
@@ -44,12 +57,29 @@ function connectToMainProcess() {
   ipcClient.on('error', (err) => {
     process.stderr.write(`IPC connection error: ${err.message}\n`);
   });
+
+  ipcClient.on('close', () => {
+    ipcClient = null;
+    if (reconnectAttempts < maxReconnectAttempts) {
+      const delay = Math.min(1000 * Math.pow(2, reconnectAttempts - 1), 30000);
+      process.stderr.write(`IPC disconnected, reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${maxReconnectAttempts})...\n`);
+      setTimeout(() => connectToMainProcess(), delay);
+    } else {
+      process.stderr.write(`IPC reconnection failed after ${maxReconnectAttempts} attempts. Operating without IPC.\n`);
+    }
+  });
 }
 
 function sendIpc(data) {
   if (ipcClient && !ipcClient.destroyed) {
     ipcClient.write(JSON.stringify(data) + '\n');
     return true;
+  }
+  // Buffer important messages while disconnected
+  if (data.type === 'report_result' || data.type === 'heartbeat' || data.type === 'register') {
+    if (messageBuffer.length < maxBufferSize) {
+      messageBuffer.push(data);
+    }
   }
   return false;
 }
@@ -454,6 +484,15 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
   process.stderr.write(`Nexus MCP server started for session ${SESSION_ID}\n`);
+
+  // Send heartbeat to main process every 10 seconds
+  setInterval(() => {
+    sendIpc({
+      type: 'heartbeat',
+      sessionId: SESSION_ID,
+      timestamp: Date.now(),
+    });
+  }, 10000);
 }
 
 main().catch((err) => {

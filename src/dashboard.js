@@ -72,6 +72,7 @@ export class Dashboard {
       return `
         <div class="dash-card ${s.isLead ? 'dash-card-lead' : ''} dash-card-${s.status || 'idle'}" data-id="${s.id}">
           <div class="dash-card-header">
+            <span class="health-pulse ${s.health || 'unknown'}"></span>
             <span class="dash-card-status status-${s.status || 'idle'}"></span>
             <span class="dash-card-label">${s.label || s.id}</span>
             <span class="dash-card-template">${s.template || ''}</span>

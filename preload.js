@@ -45,6 +45,7 @@ contextBridge.exposeInMainWorld('nexus', {
   onAllWorkersComplete: (cb) => onIpc('workers:all-complete', cb),
   retrySession: (id, originalInfo) => ipcRenderer.send('session:retry', { id, originalInfo }),
   onRetryAvailable: (cb) => onIpc('session:retry-available', cb),
+  onSessionHeartbeat: (cb) => ipcRenderer.on('session:heartbeat', (_e, data) => cb(data)),
 
   // Auto-updater
   checkForUpdates: () => ipcRenderer.invoke('updater:check'),

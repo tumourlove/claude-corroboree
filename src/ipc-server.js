@@ -14,6 +14,7 @@ class IpcServer {
     this.server = null;
     this.results = new Map(); // sessionId -> { result, status, timestamp }
     this.spawnedWorkers = new Set(); // track worker session IDs
+    this.heartbeats = new Map(); // sessionId -> { timestamp }
   }
 
   getIpcPath() {
@@ -75,7 +76,10 @@ class IpcServer {
         return msg.sessionId;
 
       case 'list_sessions': {
-        const sessions = this.sessionManager.listSessions();
+        const sessions = this.sessionManager.listSessions().map(s => ({
+          ...s,
+          health: this.getSessionHealth(s.id),
+        }));
         this._reply(socket, { type: 'sessions', sessions, requestId: msg.requestId });
         break;
       }
@@ -271,7 +275,8 @@ class IpcServer {
 
       case 'get_session_status': {
         const session = this.sessionManager.getSessionInfo(msg.sessionId);
-        this._reply(socket, { type: 'session_status', session, requestId: msg.requestId });
+        const health = this.getSessionHealth(msg.sessionId);
+        this._reply(socket, { type: 'session_status', session: { ...session, health }, requestId: msg.requestId });
         break;
       }
 
@@ -309,6 +314,17 @@ class IpcServer {
         }
         break;
       }
+
+      case 'heartbeat': {
+        this.heartbeats.set(msg.sessionId, { timestamp: msg.timestamp });
+        if (this.sessionManager.mainWindow) {
+          this.sessionManager.mainWindow.webContents.send('session:heartbeat', {
+            id: msg.sessionId,
+            health: 'healthy',
+          });
+        }
+        break;
+      }
     }
 
     return currentSessionId;
@@ -317,6 +333,15 @@ class IpcServer {
   sendToSession(sessionId, data) {
     const socket = this.clients.get(sessionId);
     if (socket) this._reply(socket, data);
+  }
+
+  getSessionHealth(sessionId) {
+    const hb = this.heartbeats.get(sessionId);
+    if (!hb) return 'unknown';
+    const age = Date.now() - hb.timestamp;
+    if (age < 15000) return 'healthy';
+    if (age < 30000) return 'slow';
+    return 'unresponsive';
   }
 
   _reply(socket, data) {

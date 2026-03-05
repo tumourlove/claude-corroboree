@@ -199,6 +199,9 @@ window.nexus.onRetryAvailable(({ id, retryCount, maxRetries }) => {
   }
 });
 
+// Heartbeat events — wire up listener (dashboard auto-refreshes on status changes)
+window.nexus.onSessionHeartbeat(() => {});
+
 // Focus tab from dashboard
 window.addEventListener('nexus:focus-tab', (e) => {
   tabManager.activateTab(e.detail.id);
