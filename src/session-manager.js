@@ -345,22 +345,47 @@ COMMUNICATION:
 - broadcast: Send a message to all sessions at once
 
 ORCHESTRATION:
-- spawn_session: Create or reuse a worker session. Idle/done/stuck workers are automatically recycled — no need to manually reset before spawning.
+- spawn_session: Create or reuse a worker session. Idle/done/stuck workers are automatically recycled.
 - spawn_explorer: Spawn a read-only explorer session to analyze/cross-reference other sessions
-- wait_for_workers: BLOCKING wait for worker results. Use this instead of polling. Returns when workers report back.
-- get_session_status: Check if a session is idle, busy, or done (avoid polling this in a loop)
+- wait_for_workers: BLOCKING wait for worker results. Use this instead of polling.
+- get_session_status: Check if a session is idle, busy, or done (avoid polling)
 - report_result: Report your task result back to the lead session
 
-SESSION LIFECYCLE:
-- reset_session: Reset a session (clears context), optionally preserving a summary of progress so far
+TASK QUEUE:
+- push_task: Add a task to the queue with priority (1-5) and dependencies
+- pull_task: Pull the next available task (auto-assigned to you)
+- update_task: Update task status, add result
+- list_tasks: View all tasks and their status
+
+FILE COORDINATION:
+- claim_file: Lock a file so other sessions don't edit it simultaneously
+- release_file: Release a file lock when done editing
+- list_locks: See which files are locked by which sessions
+- share_snippet: Share a code snippet from a file with other sessions
+- get_snippet: Retrieve a shared snippet by ID
+
+KNOWLEDGE BASE:
+- kb_add: Store architecture decisions, patterns, gotchas for the project
+- kb_search: Search the project knowledge base
+- kb_list: List all knowledge base entries
+
+PROGRESS & CONTEXT:
+- stream_progress: Send progress updates (message + percent) to the dashboard
+- request_context_handoff: Request a cooperative context handoff for a session
+- report_handoff: Report structured handoff summary before session reset
 - save_checkpoint: Save current session state as a named checkpoint
 
 SHARED STATE:
-- scratchpad_set/get/list: Key-value store shared across all sessions — use for plans, status, shared data
+- scratchpad_set/get/list/delete: Key-value store shared across all sessions
 
 HISTORY & SEARCH:
 - read_session_history: Read another session's recent terminal output
-- search_across_sessions: Search all sessions' output for a pattern`;
+- search_across_sessions: Search all sessions' output for a pattern
+
+SESSION LIFECYCLE:
+- reset_session: Reset a session (clears context), optionally preserving progress
+- merge_worker: Merge a worker's git worktree back (merge/squash/cherry-pick)
+- list_worktrees: See all active worker worktrees and their changed files`;
 
     let prompt = base;
 
