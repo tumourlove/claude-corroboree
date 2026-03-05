@@ -52,11 +52,17 @@ class IpcServer {
       });
 
       socket.on('close', () => {
-        if (sessionId) this.clients.delete(sessionId);
+        if (sessionId) {
+          this.clients.delete(sessionId);
+          if (this.conflictDetector) this.conflictDetector.clearSession(sessionId);
+        }
       });
 
       socket.on('error', () => {
-        if (sessionId) this.clients.delete(sessionId);
+        if (sessionId) {
+          this.clients.delete(sessionId);
+          if (this.conflictDetector) this.conflictDetector.clearSession(sessionId);
+        }
       });
     });
 

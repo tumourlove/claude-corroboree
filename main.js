@@ -29,7 +29,6 @@ let conflictDetector;
 let notificationManager;
 let taskQueue;
 let checkpointManager;
-let knowledgeBase;
 let tabCounter = 0;
 
 function createWindow() {
@@ -334,7 +333,7 @@ app.on('window-all-closed', () => {
   if (checkpointManager) checkpointManager.destroy();
   if (ipcServer) ipcServer.stop();
   if (scratchpad) scratchpad.destroy();
-  if (knowledgeBase) knowledgeBase.destroy();
+  if (ipcServer && ipcServer.knowledgeBase) ipcServer.knowledgeBase.destroy();
   if (sessionManager) sessionManager.destroy();
   app.quit();
 });

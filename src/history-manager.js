@@ -17,7 +17,11 @@ class HistoryManager {
     if (!this.sessions.has(sessionId)) {
       this.sessions.set(sessionId, { output: [], startTime: Date.now() });
     }
-    this.sessions.get(sessionId).output.push(data);
+    const sessData = this.sessions.get(sessionId);
+    sessData.output.push(data);
+    if (sessData.output.length > 5000) {
+      sessData.output = sessData.output.slice(-3000);
+    }
     this.buffers.get(sessionId).push(data);
 
     // Keep buffer bounded (last 10000 lines worth)
@@ -35,7 +39,12 @@ class HistoryManager {
   }
 
   searchAcrossSessions(pattern, sessionIds) {
-    const regex = new RegExp(pattern, 'gi');
+    let regex;
+    try {
+      regex = new RegExp(pattern, 'gi');
+    } catch (e) {
+      return {}; // invalid regex
+    }
     const results = {};
 
     const targets = sessionIds || [...this.buffers.keys()];

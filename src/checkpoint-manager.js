@@ -18,8 +18,8 @@ class CheckpointManager {
   }
 
   _saveAll(sessionManager) {
-    const sessions = sessionManager.listSessions();
-    for (const session of sessions) {
+    // Access raw sessions to get outputBuffer (listSessions strips it)
+    for (const [id, session] of sessionManager.sessions) {
       if (session.status === 'done' || session.status === 'failed') continue;
       this.save(session);
     }

@@ -141,6 +141,8 @@ class SessionManager {
         });
 
         setTimeout(() => {
+          // Guard: don't retry if session was manually closed
+          if (!this.sessions.has(id)) return;
           const lastOutput = this._getRecentOutput(id);
           const retryPrompt = `[RETRY ${sess.retryCount}/${sess.maxRetries}] Previous attempt exited with code ${exitCode}.\n` +
             (lastOutput ? `Recent output:\n${lastOutput.slice(0, 2000)}\n\n` : '') +
