@@ -2,6 +2,8 @@ class ConflictDetector {
   constructor() {
     // sessionId -> Set<filepath>
     this.fileEdits = new Map();
+    // filepath -> { sessionId, timestamp, intent }
+    this.locks = new Map();
   }
 
   recordEdit(sessionId, filepath) {
@@ -25,8 +27,58 @@ class ConflictDetector {
     return [...(this.fileEdits.get(sessionId) || [])];
   }
 
+  claimFile(sessionId, filepath, intent = 'edit') {
+    const existing = this.locks.get(filepath);
+    const tenMinAgo = Date.now() - 10 * 60 * 1000;
+
+    if (existing && existing.sessionId !== sessionId && existing.timestamp > tenMinAgo) {
+      return {
+        conflict: true,
+        lockedBy: existing.sessionId,
+        intent: existing.intent,
+        timestamp: existing.timestamp,
+      };
+    }
+
+    this.locks.set(filepath, { sessionId, timestamp: Date.now(), intent });
+    return { conflict: false };
+  }
+
+  releaseFile(sessionId, filepath) {
+    const lock = this.locks.get(filepath);
+    if (lock && lock.sessionId === sessionId) {
+      this.locks.delete(filepath);
+      return true;
+    }
+    return false;
+  }
+
+  listLocks(sessionId) {
+    const tenMinAgo = Date.now() - 10 * 60 * 1000;
+    const result = [];
+    for (const [filepath, lock] of this.locks) {
+      if (lock.timestamp < tenMinAgo) {
+        this.locks.delete(filepath); // auto-clean expired
+        continue;
+      }
+      if (!sessionId || lock.sessionId === sessionId) {
+        result.push({ filepath, ...lock });
+      }
+    }
+    return result;
+  }
+
+  clearSessionLocks(sessionId) {
+    for (const [filepath, lock] of [...this.locks]) {
+      if (lock.sessionId === sessionId) {
+        this.locks.delete(filepath);
+      }
+    }
+  }
+
   clearSession(sessionId) {
     this.fileEdits.delete(sessionId);
+    this.clearSessionLocks(sessionId);
   }
 }
 
