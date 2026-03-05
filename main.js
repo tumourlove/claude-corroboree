@@ -17,6 +17,7 @@ const { HistoryManager } = require('./src/history-manager');
 const { ConflictDetector } = require('./src/conflict-detector');
 const { NotificationManager } = require('./src/notification-manager');
 const { TaskQueue } = require('./src/task-queue');
+const { CheckpointManager } = require('./src/checkpoint-manager');
 const { autoUpdater } = require('electron-updater');
 
 let mainWindow;
@@ -27,6 +28,7 @@ let historyManager;
 let conflictDetector;
 let notificationManager;
 let taskQueue;
+let checkpointManager;
 let knowledgeBase;
 let tabCounter = 0;
 
@@ -49,6 +51,9 @@ function createWindow() {
   historyManager = new HistoryManager();
   conflictDetector = new ConflictDetector();
   notificationManager = new NotificationManager(mainWindow);
+  checkpointManager = new CheckpointManager();
+  checkpointManager.writePidFile();
+  checkpointManager.startAutoCheckpoint(sessionManager);
 
   // Capture terminal output for history
   sessionManager.onOutput = (id, data) => {
@@ -285,11 +290,32 @@ function registerShellIfNeeded() {
 }
 
 app.whenReady().then(() => {
+  // Check for unclean shutdown and offer recovery
+  const tempCheckpointMgr = new CheckpointManager();
+  if (tempCheckpointMgr.checkUncleanShutdown()) {
+    const recoverable = tempCheckpointMgr.getRecoverable();
+    if (recoverable.length > 0) {
+      const result = dialog.showMessageBoxSync({
+        type: 'question',
+        title: 'Recover Previous Sessions?',
+        message: `Nexus detected an unclean shutdown. ${recoverable.length} session(s) can be recovered.`,
+        detail: recoverable.map(s => `- ${s.label || s.id} (${s.template})`).join('\n'),
+        buttons: ['Recover', 'Start Fresh'],
+        defaultId: 0,
+      });
+      if (result === 1) {
+        tempCheckpointMgr.clearCheckpoints();
+      }
+      // If recover, checkpoints stay and will be available after createWindow
+    }
+  }
+
   createWindow();
   setupAutoUpdater();
   registerShellIfNeeded();
 });
 app.on('window-all-closed', () => {
+  if (checkpointManager) checkpointManager.destroy();
   if (ipcServer) ipcServer.stop();
   if (scratchpad) scratchpad.destroy();
   if (knowledgeBase) knowledgeBase.destroy();

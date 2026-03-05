@@ -49,6 +49,45 @@ class WorktreeManager {
     return this.worktrees.get(sessionId);
   }
 
+  mergeWorktree(sessionId, strategy = 'merge') {
+    const info = this.worktrees.get(sessionId);
+    if (!info) return { success: false, error: 'No worktree found for session' };
+
+    try {
+      const opts = { cwd: info.repoPath, encoding: 'utf8', timeout: 30000 };
+
+      if (strategy === 'squash') {
+        execSync(`git merge --squash ${info.branch}`, opts);
+        execSync(`git commit -m "Squashed merge from ${info.branch}"`, opts);
+      } else if (strategy === 'cherry-pick') {
+        // Get commits unique to this branch
+        const commits = execSync(`git log --format=%H ${info.branch} --not HEAD`, opts).trim().split('\n').filter(Boolean).reverse();
+        for (const commit of commits) {
+          execSync(`git cherry-pick ${commit}`, opts);
+        }
+      } else {
+        execSync(`git merge ${info.branch}`, opts);
+      }
+
+      return { success: true, branch: info.branch, strategy };
+    } catch (e) {
+      return { success: false, error: e.message, branch: info.branch };
+    }
+  }
+
+  listWorktrees() {
+    const result = [];
+    for (const [sessionId, info] of this.worktrees) {
+      let changedFiles = [];
+      try {
+        const output = execSync(`git diff --name-only HEAD`, { cwd: info.path, encoding: 'utf8', timeout: 5000 });
+        changedFiles = output.trim().split('\n').filter(Boolean);
+      } catch (e) { /* ignore */ }
+      result.push({ sessionId, branch: info.branch, path: info.path, changedFiles });
+    }
+    return result;
+  }
+
   cleanup() {
     for (const [id] of this.worktrees) {
       this.removeWorktree(id);

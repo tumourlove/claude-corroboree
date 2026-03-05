@@ -514,6 +514,95 @@ server.tool(
   }
 );
 
+// --- Context Handoff Tools ---
+
+server.tool(
+  'request_context_handoff',
+  'Request a cooperative context handoff — session summarizes progress before being reset with full context',
+  {
+    session_id: z.string().describe('Session to handoff (or "self" for current session)'),
+    reason: z.string().optional().describe('Why the handoff is needed'),
+  },
+  async ({ session_id, reason }) => {
+    const targetId = session_id === 'self' ? SESSION_ID : session_id;
+    sendIpc({
+      type: 'request_handoff',
+      targetSessionId: targetId,
+      requestedBy: SESSION_ID,
+      reason: reason || 'context pressure',
+    });
+    return {
+      content: [{ type: 'text', text: `Handoff requested for session ${targetId}. Session will be asked to summarize before reset.` }],
+    };
+  }
+);
+
+server.tool(
+  'report_handoff',
+  'Report your progress summary for a context handoff (call this when asked to prepare for handoff)',
+  {
+    summary: z.string().describe('2-3 sentence summary of progress'),
+    files_modified: z.array(z.string()).optional().describe('List of files you modified'),
+    remaining_work: z.string().optional().describe('What still needs to be done'),
+    key_findings: z.array(z.string()).optional().describe('Important discoveries or decisions'),
+  },
+  async ({ summary, files_modified, remaining_work, key_findings }) => {
+    sendIpc({
+      type: 'report_handoff',
+      sessionId: SESSION_ID,
+      summary,
+      filesModified: files_modified || [],
+      remainingWork: remaining_work || '',
+      keyFindings: key_findings || [],
+    });
+    return {
+      content: [{ type: 'text', text: 'Handoff summary reported. Session will be reset with full context shortly.' }],
+    };
+  }
+);
+
+// --- Git Worktree Tools ---
+
+server.tool(
+  'merge_worker',
+  'Merge a worker session\'s worktree branch into the main branch',
+  {
+    session_id: z.string().describe('Worker session ID to merge'),
+    strategy: z.enum(['merge', 'cherry-pick', 'squash']).default('merge').describe('Merge strategy'),
+  },
+  async ({ session_id, strategy }) => {
+    try {
+      const response = await ipcRequest({
+        type: 'merge_worktree',
+        sessionId: session_id,
+        strategy,
+      });
+      if (response.success) {
+        return { content: [{ type: 'text', text: `Merged ${response.branch} via ${strategy}` }] };
+      }
+      return { content: [{ type: 'text', text: `Merge failed: ${response.error}` }] };
+    } catch (e) {
+      return { content: [{ type: 'text', text: `Error: ${e.message}` }] };
+    }
+  }
+);
+
+server.tool(
+  'list_worktrees',
+  'List all active git worktrees and their changed files',
+  {},
+  async () => {
+    try {
+      const response = await ipcRequest({ type: 'list_worktrees' });
+      return {
+        content: [{ type: 'text', text: JSON.stringify(response.worktrees, null, 2) }],
+      };
+    } catch (e) {
+      return { content: [{ type: 'text', text: `Error: ${e.message}` }] };
+    }
+  }
+);
+
 // --- Task Queue Tools ---
 
 server.tool(

@@ -29,6 +29,10 @@ export class Dashboard {
         <h3>Task Queue</h3>
         <div id="dash-task-list" class="dash-task-list"></div>
       </div>
+      <div class="dash-section" id="dash-task-graph-section">
+        <h3>Task Graph</h3>
+        <div id="dash-task-graph"></div>
+      </div>
       <div class="dash-log-panel">
         <h3>Activity</h3>
         <div class="dashboard-log" id="dash-log">
@@ -164,6 +168,7 @@ export class Dashboard {
     if (!el) return;
     if (!tasks || tasks.length === 0) {
       el.innerHTML = '<div class="dash-empty">No tasks in queue</div>';
+      this.renderGraph(tasks);
       return;
     }
     const statusOrder = ['in_progress', 'assigned', 'pending', 'done', 'failed'];
@@ -180,6 +185,71 @@ export class Dashboard {
         ${t.assignee ? `<span class="task-assignee">${this._escape(t.assignee)}</span>` : ''}
       </div>
     `).join('');
+    this.renderGraph(tasks);
+  }
+
+  renderGraph(tasks) {
+    const container = document.getElementById('dash-task-graph');
+    if (!container) return;
+    if (!tasks || tasks.length === 0) {
+      container.innerHTML = '<div class="dash-empty">No tasks to visualize</div>';
+      return;
+    }
+
+    // Build adjacency info
+    const taskMap = new Map(tasks.map(t => [t.id, t]));
+
+    // Topological layers
+    const layers = [];
+    const placed = new Set();
+    let remaining = [...tasks];
+
+    while (remaining.length > 0) {
+      const layer = remaining.filter(t =>
+        (t.dependencies || []).every(d => placed.has(d))
+      );
+      if (layer.length === 0) {
+        // Circular deps — just dump remaining
+        layers.push(remaining);
+        break;
+      }
+      layers.push(layer);
+      layer.forEach(t => placed.add(t.id));
+      remaining = remaining.filter(t => !placed.has(t.id));
+    }
+
+    // Render
+    const statusColors = {
+      pending: '#6b7280',
+      assigned: '#8b5cf6',
+      in_progress: '#3b82f6',
+      done: '#4ade80',
+      failed: '#ef4444',
+    };
+
+    let html = '<div class="task-graph">';
+    layers.forEach((layer, layerIdx) => {
+      html += `<div class="graph-layer">`;
+      layer.forEach(t => {
+        const color = statusColors[t.status] || '#6b7280';
+        const blocked = (t.dependencies || []).some(d => {
+          const dep = taskMap.get(d);
+          return dep && dep.status !== 'done';
+        });
+        html += `
+          <div class="graph-node ${blocked ? 'graph-node-blocked' : ''}" style="border-color:${color}" title="${this._escape(t.title)}\nStatus: ${t.status}\nPriority: ${t.priority}${t.assignee ? '\nAssigned: ' + t.assignee : ''}">
+            <div class="graph-node-id" style="background:${color}">#${t.id}</div>
+            <div class="graph-node-title">${this._escape(t.title.slice(0, 30))}</div>
+            ${t.assignee ? `<div class="graph-node-assignee">${this._escape(t.assignee)}</div>` : ''}
+          </div>`;
+      });
+      html += `</div>`;
+      if (layerIdx < layers.length - 1) {
+        html += `<div class="graph-arrow">\u2192</div>`;
+      }
+    });
+    html += '</div>';
+    container.innerHTML = html;
   }
 
   updateProgress(data) {

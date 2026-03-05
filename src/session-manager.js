@@ -17,8 +17,21 @@ class SessionManager {
     this._stuckCheckInterval = setInterval(() => this._checkStuck(), 10000);
   }
 
-  createSession(id, { label, cwd, initialPrompt, template, isLead = false, useWorktree = false, cols = 80, rows = 30 }) {
+  createSession(id, opts) {
+    const { label, cwd, initialPrompt, template, isLead = false, cols = 80, rows = 30 } = opts;
+    let useWorktree = opts.useWorktree || false;
     let resolvedCwd = cwd || process.argv[2] || process.env.USERPROFILE || process.env.HOME;
+
+    // Default: workers get isolated worktrees in git repos
+    if (!isLead && !useWorktree && opts.useWorktree !== false) {
+      try {
+        const { execSync } = require('child_process');
+        execSync('git rev-parse --git-dir', { cwd: resolvedCwd, encoding: 'utf8', timeout: 3000 });
+        useWorktree = true;
+      } catch (e) {
+        // Not a git repo, skip worktree
+      }
+    }
 
     // Optionally create an isolated git worktree for this session
     let worktreeInfo = null;

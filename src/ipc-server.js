@@ -519,6 +519,73 @@ class IpcServer {
         break;
       }
 
+      // --- Context Handoffs ---
+      case 'request_handoff': {
+        // Send message to target session asking it to summarize
+        const targetSocket = this.clients.get(msg.targetSessionId);
+        if (targetSocket) {
+          this._reply(targetSocket, {
+            type: 'message',
+            from: msg.requestedBy,
+            message: `[HANDOFF_REQUEST] Please prepare for context handoff. Reason: ${msg.reason}. ` +
+              `Call report_handoff with: summary (2-3 sentences of progress), files_modified, remaining_work, and key_findings. ` +
+              `Your session will be reset with full context preserved.`,
+            priority: 'urgent',
+          });
+        }
+        break;
+      }
+
+      case 'report_handoff': {
+        const session = this.sessionManager.getSessionInfo(msg.sessionId);
+        if (!session) break;
+
+        // Store handoff in knowledge base if available
+        if (this.knowledgeBase) {
+          this.knowledgeBase.add({
+            title: `Handoff: ${session.label || msg.sessionId}`,
+            content: `Summary: ${msg.summary}\nFiles: ${msg.filesModified.join(', ')}\nRemaining: ${msg.remainingWork}\nFindings: ${msg.keyFindings.join('; ')}`,
+            category: 'decision',
+            tags: ['handoff', msg.sessionId],
+            createdBy: msg.sessionId,
+          });
+        }
+
+        // Build handoff prompt and respawn
+        const handoffPrompt = `[CONTEXT HANDOFF] You are continuing a previous session's work.\n` +
+          `Summary: ${msg.summary}\n` +
+          `Files modified: ${msg.filesModified.join(', ') || 'none'}\n` +
+          `Remaining work: ${msg.remainingWork || 'not specified'}\n` +
+          `Key findings: ${msg.keyFindings.join('; ') || 'none'}\n\n` +
+          `Original task: ${session.initialPrompt || 'unknown'}`;
+
+        // Kill and respawn
+        this.sessionManager.respawnSession(msg.sessionId, {
+          label: session.label,
+          cwd: session.cwd,
+          initialPrompt: handoffPrompt,
+          template: session.template,
+        });
+        break;
+      }
+
+      // --- Git Worktrees ---
+      case 'merge_worktree': {
+        const result = this.sessionManager.worktreeManager
+          ? this.sessionManager.worktreeManager.mergeWorktree(msg.sessionId, msg.strategy)
+          : { success: false, error: 'Worktree manager not available' };
+        this._reply(socket, { type: 'worktree_merged', ...result, requestId: msg.requestId });
+        break;
+      }
+
+      case 'list_worktrees': {
+        const worktrees = this.sessionManager.worktreeManager
+          ? this.sessionManager.worktreeManager.listWorktrees()
+          : [];
+        this._reply(socket, { type: 'worktrees_listed', worktrees, requestId: msg.requestId });
+        break;
+      }
+
       case 'heartbeat': {
         this.heartbeats.set(msg.sessionId, { timestamp: msg.timestamp });
         if (this.sessionManager.mainWindow) {
