@@ -381,9 +381,10 @@ ORCHESTRATION:
 
 TASK QUEUE:
 - push_task: Add a task to the queue with priority (1-5) and dependencies
-- pull_task: Pull the next available task (auto-assigned to you)
-- update_task: Update task status, add result
+- pull_task: Pull the next available task (only returns tasks whose dependencies are all done)
+- update_task: Update task status, add result (failing a task auto-blocks its dependents)
 - list_tasks: View all tasks and their status
+- get_task_graph: Get the full task dependency DAG (nodes + edges)
 
 FILE COORDINATION:
 - claim_file: Lock a file so other sessions don't edit it simultaneously

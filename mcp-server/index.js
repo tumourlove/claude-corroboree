@@ -21,10 +21,11 @@ const TEMPLATE_TOOLS = {
     'scratchpad_set', 'scratchpad_get', 'scratchpad_list', 'scratchpad_delete',
     'batch_scratchpad', 'scratchpad_cas', 'session_info', 'query_git_status',
     'read_session_history', 'search_across_sessions', 'save_checkpoint',
-    'stream_progress', 'list_tasks', 'pull_task', 'update_task', 'get_snippet',
+    'stream_progress', 'list_tasks', 'pull_task', 'update_task', 'get_snippet', 'get_task_graph',
     'kb_search', 'kb_list',
     'structured_message', 'context_estimate',
     'subscribe', 'unsubscribe', 'publish',
+    'recall', 'get_lineage',
   ]),
   reviewer: new Set([
     'list_sessions', 'send_message', 'read_messages', 'report_result',
@@ -32,19 +33,21 @@ const TEMPLATE_TOOLS = {
     'batch_scratchpad', 'scratchpad_cas', 'session_info', 'query_git_status',
     'get_worker_diff',
     'read_session_history', 'search_across_sessions', 'save_checkpoint',
-    'stream_progress', 'list_tasks', 'pull_task', 'update_task', 'get_snippet',
+    'stream_progress', 'list_tasks', 'pull_task', 'update_task', 'get_snippet', 'get_task_graph',
     'kb_search', 'kb_list', 'kb_add', 'share_snippet',
     'structured_message', 'context_estimate',
     'subscribe', 'unsubscribe', 'publish',
+    'remember', 'recall', 'get_lineage',
   ]),
   explorer: new Set([
     'list_sessions', 'read_messages', 'report_result',
     'read_session_history', 'search_across_sessions',
     'scratchpad_get', 'scratchpad_list', 'batch_scratchpad', 'session_info',
-    'list_tasks', 'get_snippet', 'kb_search', 'kb_list',
+    'list_tasks', 'get_snippet', 'get_task_graph', 'kb_search', 'kb_list',
     'get_worker_diff',
     'structured_message', 'context_estimate',
     'subscribe', 'unsubscribe',
+    'recall', 'get_lineage',
   ]),
 };
 
@@ -890,6 +893,22 @@ server.tool(
   }
 );
 
+server.tool(
+  'get_task_graph',
+  'Get the full task dependency graph (DAG) with nodes and edges for visualization',
+  {},
+  async () => {
+    try {
+      const response = await ipcRequest({ type: 'task_graph' });
+      return {
+        content: [{ type: 'text', text: JSON.stringify(response.graph, null, 2) }],
+      };
+    } catch (e) {
+      return { content: [{ type: 'text', text: `Error: ${e.message}` }] };
+    }
+  }
+);
+
 // --- Snippet Sharing Tools ---
 
 server.tool(
@@ -1502,6 +1521,91 @@ server.tool(
         status,
       });
       return { content: [{ type: 'text', text: JSON.stringify(response.decisions, null, 2) }] };
+    } catch (e) {
+      return { content: [{ type: 'text', text: `Error: ${e.message}` }] };
+    }
+  }
+);
+
+// --- Session Memory Tools ---
+
+server.tool(
+  'remember',
+  'Record a learning, decision, or discovery that should persist across session resets. Stored per-project.',
+  {
+    type: z.enum(['decision', 'discovery', 'failure', 'pattern', 'gotcha']).describe('Type of memory entry'),
+    content: z.string().max(500).describe('The actual learning (max 500 chars)'),
+    tags: z.array(z.string()).describe('Tags for later retrieval (e.g. ["auth", "api", "race-condition"])'),
+  },
+  async ({ type, content, tags }) => {
+    try {
+      const response = await ipcRequest({
+        type: 'session_remember',
+        sessionId: SESSION_ID,
+        entryType: type,
+        content,
+        tags,
+      });
+      if (response.entryId) {
+        return { content: [{ type: 'text', text: `Remembered (${type}): ${response.entryId}` }] };
+      }
+      return { content: [{ type: 'text', text: 'Failed to store memory — no project path available' }] };
+    } catch (e) {
+      return { content: [{ type: 'text', text: `Error: ${e.message}` }] };
+    }
+  }
+);
+
+server.tool(
+  'recall',
+  'Search persistent session memories for the current project. Returns entries matching tags/query sorted by relevance.',
+  {
+    tags: z.array(z.string()).optional().describe('Filter by tags'),
+    limit: z.number().optional().default(10).describe('Max entries to return (default 10)'),
+  },
+  async ({ tags, limit }) => {
+    try {
+      const response = await ipcRequest({
+        type: 'session_recall',
+        sessionId: SESSION_ID,
+        tags: tags || [],
+        limit: limit || 10,
+      });
+      const entries = response.entries || [];
+      if (entries.length === 0) {
+        return { content: [{ type: 'text', text: 'No memories found for this project.' }] };
+      }
+      const formatted = entries.map(e =>
+        `[${e.type}] ${new Date(e.timestamp).toISOString().slice(0, 16)} (${e.sessionId}) [${e.tags.join(', ')}]\n  ${e.content}`
+      ).join('\n\n');
+      return { content: [{ type: 'text', text: `${entries.length} memories found:\n\n${formatted}` }] };
+    } catch (e) {
+      return { content: [{ type: 'text', text: `Error: ${e.message}` }] };
+    }
+  }
+);
+
+server.tool(
+  'get_lineage',
+  'Get history of attempts at a similar task across session resets. Helps avoid repeating failed approaches.',
+  {
+    task_description: z.string().describe('Description of the task to find lineage for'),
+  },
+  async ({ task_description }) => {
+    try {
+      const response = await ipcRequest({
+        type: 'session_lineage',
+        sessionId: SESSION_ID,
+        taskDescription: task_description,
+      });
+      const entries = response.entries || [];
+      if (entries.length === 0) {
+        return { content: [{ type: 'text', text: 'No prior attempts found for this task.' }] };
+      }
+      const formatted = entries.map(e =>
+        `[${e.type}] ${new Date(e.timestamp).toISOString().slice(0, 16)} (${e.sessionId}) [${e.tags.join(', ')}]\n  ${e.content}`
+      ).join('\n\n');
+      return { content: [{ type: 'text', text: `${entries.length} related entries found:\n\n${formatted}` }] };
     } catch (e) {
       return { content: [{ type: 'text', text: `Error: ${e.message}` }] };
     }

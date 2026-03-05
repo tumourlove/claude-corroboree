@@ -6,6 +6,7 @@ const { execSync } = require('child_process');
 const { EventBus } = require('./event-bus');
 const { ReviewManager } = require('./review-manager');
 const { ConsensusManager } = require('./consensus-manager');
+const { SessionMemory } = require('./session-memory');
 
 class IpcServer {
   constructor({ sessionManager, scratchpad, historyManager, conflictDetector, taskQueue, onSpawnRequest }) {
@@ -33,6 +34,8 @@ class IpcServer {
     // W12: code review + consensus
     this.reviewManager = new ReviewManager();
     this.consensusManager = new ConsensusManager();
+    // Persistent session memory
+    this.sessionMemory = new SessionMemory();
 
     // W10: Wire up conflict detector to publish file events
     if (this.conflictDetector) {
@@ -517,6 +520,12 @@ class IpcServer {
       case 'task_list': {
         const tasks = this.taskQueue.list(msg.filter);
         this._reply(socket, { type: 'task_listed', tasks, requestId: msg.requestId });
+        break;
+      }
+
+      case 'task_graph': {
+        const graph = this.taskQueue.getGraph();
+        this._reply(socket, { type: 'task_graph', graph, requestId: msg.requestId });
         break;
       }
 
@@ -1064,6 +1073,36 @@ class IpcServer {
       case 'decision_get': {
         const decision = this.consensusManager.getDecision(msg.decisionId);
         this._reply(socket, { type: 'decision_detail', decision, requestId: msg.requestId });
+        break;
+      }
+
+      // --- Session Memory ---
+      case 'session_remember': {
+        const session = this.sessionManager.getSessionInfo(msg.sessionId);
+        const projectPath = msg.projectPath || (session && session.cwd) || null;
+        const entryId = this.sessionMemory.addEntry(msg.sessionId, {
+          type: msg.entryType,
+          content: msg.content,
+          tags: msg.tags,
+          projectPath,
+        });
+        this._reply(socket, { type: 'memory_added', entryId, requestId: msg.requestId });
+        break;
+      }
+
+      case 'session_recall': {
+        const session = this.sessionManager.getSessionInfo(msg.sessionId);
+        const projectPath = msg.projectPath || (session && session.cwd) || null;
+        const entries = this.sessionMemory.getRelevant(projectPath, msg.tags, msg.limit);
+        this._reply(socket, { type: 'memory_results', entries, requestId: msg.requestId });
+        break;
+      }
+
+      case 'session_lineage': {
+        const session = this.sessionManager.getSessionInfo(msg.sessionId);
+        const projectPath = msg.projectPath || (session && session.cwd) || null;
+        const entries = this.sessionMemory.getTaskLineage(msg.taskDescription, projectPath);
+        this._reply(socket, { type: 'memory_lineage', entries, requestId: msg.requestId });
         break;
       }
 
