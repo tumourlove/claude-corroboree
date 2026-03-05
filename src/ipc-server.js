@@ -178,10 +178,18 @@ class IpcServer {
           timestamp: Date.now(),
         }), '_results');
 
-        // Forward to lead session
+        // Forward structured worker result to lead sessions
         for (const [id, s] of this.clients) {
           const session = this.sessionManager.getSessionInfo(id);
           if (session && session.isLead) {
+            this._reply(s, {
+              type: 'worker_result',
+              from: msg.sessionId,
+              status: msg.status,
+              result: msg.result,
+              timestamp: Date.now(),
+            });
+            // Also send as regular message for chat display
             this._reply(s, {
               type: 'message',
               from: msg.sessionId,

@@ -151,14 +151,17 @@ function handleIpcMessage(msg) {
     // Update local registry from main process
     msg.sessions.forEach(s => registry.register(s.id, s));
   }
+  if (msg.type === 'worker_result') {
+    pendingResults.push({
+      from: msg.from,
+      message: `[RESULT ${msg.status}] ${msg.result}`,
+      timestamp: msg.timestamp || Date.now(),
+    });
+    for (const resolve of resultWaiters) resolve();
+    resultWaiters = [];
+  }
   if (msg.type === 'message') {
     messageBus.send(msg.from, SESSION_ID, msg.message, msg.priority);
-    // If it's a result message, collect it and wake any waiters
-    if (msg.message && msg.message.startsWith('[RESULT ')) {
-      pendingResults.push({ from: msg.from, message: msg.message, timestamp: Date.now() });
-      for (const resolve of resultWaiters) resolve();
-      resultWaiters = [];
-    }
   }
 }
 
