@@ -76,7 +76,7 @@ class IpcServer {
 
       case 'list_sessions': {
         const sessions = this.sessionManager.listSessions();
-        this._reply(socket, { type: 'sessions', sessions });
+        this._reply(socket, { type: 'sessions', sessions, requestId: msg.requestId });
         break;
       }
 
@@ -188,6 +188,7 @@ class IpcServer {
           // Clear completed batch to free memory
           this.results.clear();
           this.spawnedWorkers.clear();
+          this.scratchpad.clearNamespace('_results');
         }
         break;
       }
@@ -198,25 +199,31 @@ class IpcServer {
 
       case 'scratchpad_get': {
         const value = this.scratchpad.get(msg.key, msg.namespace);
-        this._reply(socket, { type: 'scratchpad_value', key: msg.key, value });
+        this._reply(socket, { type: 'scratchpad_value', key: msg.key, value, requestId: msg.requestId });
         break;
       }
 
       case 'scratchpad_list': {
-        const keys = this.scratchpad.list(msg.namespace);
-        this._reply(socket, { type: 'scratchpad_keys', keys });
+        const keys = msg.include_values
+          ? this.scratchpad.list(msg.namespace)
+          : this.scratchpad.listKeys(msg.namespace);
+        this._reply(socket, { type: 'scratchpad_keys', keys, requestId: msg.requestId });
         break;
       }
 
+      case 'scratchpad_delete':
+        this.scratchpad.delete(msg.key, msg.namespace);
+        break;
+
       case 'read_session_history': {
         const output = this.historyManager.getRecentOutput(msg.targetSessionId, msg.lastNLines);
-        this._reply(socket, { type: 'session_history', sessionId: msg.targetSessionId, output });
+        this._reply(socket, { type: 'session_history', sessionId: msg.targetSessionId, output, requestId: msg.requestId });
         break;
       }
 
       case 'search_sessions': {
         const results = this.historyManager.searchAcrossSessions(msg.pattern, msg.sessionIds);
-        this._reply(socket, { type: 'search_results', results });
+        this._reply(socket, { type: 'search_results', results, requestId: msg.requestId });
         break;
       }
 
@@ -248,7 +255,7 @@ class IpcServer {
 
       case 'save_checkpoint': {
         const filepath = this.historyManager.saveToFile(msg.sessionId, msg.label || 'checkpoint');
-        this._reply(socket, { type: 'checkpoint_saved', filepath });
+        this._reply(socket, { type: 'checkpoint_saved', filepath, requestId: msg.requestId });
         break;
       }
 
@@ -258,13 +265,13 @@ class IpcServer {
           const session = this.sessionManager.getSessionInfo(id);
           results.push({ id, label: session?.label || id, ...r });
         }
-        this._reply(socket, { type: 'results', results });
+        this._reply(socket, { type: 'results', results, requestId: msg.requestId });
         break;
       }
 
       case 'get_session_status': {
         const session = this.sessionManager.getSessionInfo(msg.sessionId);
-        this._reply(socket, { type: 'session_status', session });
+        this._reply(socket, { type: 'session_status', session, requestId: msg.requestId });
         break;
       }
 
@@ -298,7 +305,7 @@ class IpcServer {
       case 'get_session_files': {
         if (this.conflictDetector) {
           const files = this.conflictDetector.getSessionFiles(msg.sessionId);
-          this._reply(socket, { type: 'session_files', sessionId: msg.sessionId, files });
+          this._reply(socket, { type: 'session_files', sessionId: msg.sessionId, files, requestId: msg.requestId });
         }
         break;
       }

@@ -17,6 +17,7 @@ const registry = new SessionRegistry();
 
 // Connect to main Electron process for shared state
 let ipcClient;
+let ipcBuffer = '';
 
 function connectToMainProcess() {
   ipcClient = net.createConnection(IPC_PATH, () => {
@@ -25,14 +26,18 @@ function connectToMainProcess() {
   });
 
   ipcClient.on('data', (data) => {
-    try {
-      const messages = data.toString().split('\n').filter(Boolean);
-      for (const msg of messages) {
-        const parsed = JSON.parse(msg);
+    ipcBuffer += data.toString();
+    const lines = ipcBuffer.split('\n');
+    ipcBuffer = lines.pop(); // keep incomplete trailing fragment
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        const parsed = JSON.parse(line);
         handleIpcMessage(parsed);
+      } catch (e) {
+        process.stderr.write(`IPC parse error: ${e.message}\n`);
       }
-    } catch (e) {
-      process.stderr.write(`IPC parse error: ${e.message}\n`);
     }
   });
 
@@ -44,14 +49,46 @@ function connectToMainProcess() {
 function sendIpc(data) {
   if (ipcClient && !ipcClient.destroyed) {
     ipcClient.write(JSON.stringify(data) + '\n');
+    return true;
   }
+  return false;
 }
 
 // Collected worker results for wait_for_workers
 const pendingResults = [];
 let resultWaiters = []; // resolve callbacks waiting for results
 
+// Request/response IPC tracking
+let ipcRequestId = 0;
+const pendingIpcRequests = new Map(); // requestId -> { resolve, timer }
+
+function ipcRequest(data, timeoutMs = 5000) {
+  const requestId = ++ipcRequestId;
+  data.requestId = requestId;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingIpcRequests.delete(requestId);
+      reject(new Error('IPC request timed out'));
+    }, timeoutMs);
+    pendingIpcRequests.set(requestId, { resolve, timer });
+    if (!sendIpc(data)) {
+      clearTimeout(timer);
+      pendingIpcRequests.delete(requestId);
+      reject(new Error('IPC not connected'));
+    }
+  });
+}
+
 function handleIpcMessage(msg) {
+  // Handle request/response pattern
+  if (msg.requestId && pendingIpcRequests.has(msg.requestId)) {
+    const { resolve, timer } = pendingIpcRequests.get(msg.requestId);
+    clearTimeout(timer);
+    pendingIpcRequests.delete(msg.requestId);
+    resolve(msg);
+    return;
+  }
+
   // Handle responses from main process
   if (msg.type === 'sessions') {
     // Update local registry from main process
@@ -81,16 +118,14 @@ server.tool(
   'List all active Claude Code sessions in the Nexus terminal',
   {},
   async () => {
-    sendIpc({ type: 'list_sessions' });
-    // Wait briefly for response
-    await new Promise(r => setTimeout(r, 100));
-    const sessions = registry.list();
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify(sessions, null, 2),
-      }],
-    };
+    try {
+      const response = await ipcRequest({ type: 'list_sessions' });
+      return {
+        content: [{ type: 'text', text: JSON.stringify(response.sessions, null, 2) }],
+      };
+    } catch (e) {
+      return { content: [{ type: 'text', text: `Error: ${e.message}` }] };
+    }
   }
 );
 
@@ -124,8 +159,6 @@ server.tool(
     limit: z.number().default(50).describe('Max messages to return'),
   },
   async ({ since_timestamp, limit }) => {
-    sendIpc({ type: 'read_messages', sessionId: SESSION_ID, since_timestamp, limit });
-    await new Promise(r => setTimeout(r, 100));
     const messages = messageBus.read(SESSION_ID, { sinceTimestamp: since_timestamp, limit });
     return {
       content: [{ type: 'text', text: JSON.stringify(messages, null, 2) }],
@@ -168,7 +201,6 @@ server.tool(
       label: label || 'Worker',
       template,
     });
-    await new Promise(r => setTimeout(r, 500));
     return {
       content: [{ type: 'text', text: `Session spawned: ${label || 'Worker'} in ${working_directory}` }],
     };
@@ -182,16 +214,14 @@ server.tool(
     session_id: z.string().describe('ID of the session to check'),
   },
   async ({ session_id }) => {
-    sendIpc({ type: 'get_session_status', sessionId: session_id });
-    await new Promise(r => setTimeout(r, 100));
-    const session = registry.get(session_id);
-    const result = messageBus.getResult(session_id);
-    return {
-      content: [{
-        type: 'text',
-        text: JSON.stringify({ session, result }, null, 2),
-      }],
-    };
+    try {
+      const response = await ipcRequest({ type: 'get_session_status', sessionId: session_id });
+      return {
+        content: [{ type: 'text', text: JSON.stringify(response.session, null, 2) }],
+      };
+    } catch (e) {
+      return { content: [{ type: 'text', text: `Error: ${e.message}` }] };
+    }
   }
 );
 
@@ -271,25 +301,47 @@ server.tool(
     namespace: z.string().optional().describe('Optional namespace'),
   },
   async ({ key, namespace }) => {
-    sendIpc({ type: 'scratchpad_get', key, namespace });
-    await new Promise(r => setTimeout(r, 100));
-    return {
-      content: [{ type: 'text', text: '(value will be returned via IPC)' }],
-    };
+    try {
+      const response = await ipcRequest({ type: 'scratchpad_get', key, namespace });
+      return {
+        content: [{ type: 'text', text: response.value !== null ? response.value : `(key "${key}" not found)` }],
+      };
+    } catch (e) {
+      return { content: [{ type: 'text', text: `Error: ${e.message}` }] };
+    }
   }
 );
 
 server.tool(
   'scratchpad_list',
-  'List all keys in the shared scratchpad',
+  'List all keys in the shared scratchpad (returns keys only by default to save context)',
   {
     namespace: z.string().optional().describe('Optional namespace filter'),
+    include_values: z.boolean().default(false).describe('Include values in response (default: keys only, saves context)'),
   },
-  async ({ namespace }) => {
-    sendIpc({ type: 'scratchpad_list', namespace });
-    await new Promise(r => setTimeout(r, 100));
+  async ({ namespace, include_values }) => {
+    try {
+      const response = await ipcRequest({ type: 'scratchpad_list', namespace, include_values });
+      return {
+        content: [{ type: 'text', text: JSON.stringify(response.keys, null, 2) }],
+      };
+    } catch (e) {
+      return { content: [{ type: 'text', text: `Error: ${e.message}` }] };
+    }
+  }
+);
+
+server.tool(
+  'scratchpad_delete',
+  'Delete a key from the shared scratchpad',
+  {
+    key: z.string().describe('Key to delete'),
+    namespace: z.string().optional().describe('Optional namespace'),
+  },
+  async ({ key, namespace }) => {
+    sendIpc({ type: 'scratchpad_delete', key, namespace, from: SESSION_ID });
     return {
-      content: [{ type: 'text', text: '(keys will be returned via IPC)' }],
+      content: [{ type: 'text', text: `Deleted: ${namespace ? namespace + '.' : ''}${key}` }],
     };
   }
 );
@@ -304,11 +356,14 @@ server.tool(
     last_n_lines: z.number().default(100).describe('Number of recent lines to return'),
   },
   async ({ session_id, last_n_lines }) => {
-    sendIpc({ type: 'read_session_history', targetSessionId: session_id, lastNLines: last_n_lines });
-    await new Promise(r => setTimeout(r, 200));
-    return {
-      content: [{ type: 'text', text: '(history will be returned via IPC)' }],
-    };
+    try {
+      const response = await ipcRequest({ type: 'read_session_history', targetSessionId: session_id, lastNLines: last_n_lines });
+      return {
+        content: [{ type: 'text', text: response.output || '(no output)' }],
+      };
+    } catch (e) {
+      return { content: [{ type: 'text', text: `Error: ${e.message}` }] };
+    }
   }
 );
 
@@ -320,11 +375,14 @@ server.tool(
     session_ids: z.array(z.string()).optional().describe('Specific sessions to search (default: all)'),
   },
   async ({ pattern, session_ids }) => {
-    sendIpc({ type: 'search_sessions', pattern, sessionIds: session_ids });
-    await new Promise(r => setTimeout(r, 300));
-    return {
-      content: [{ type: 'text', text: '(search results will be returned via IPC)' }],
-    };
+    try {
+      const response = await ipcRequest({ type: 'search_sessions', pattern, sessionIds: session_ids });
+      return {
+        content: [{ type: 'text', text: JSON.stringify(response.results, null, 2) }],
+      };
+    } catch (e) {
+      return { content: [{ type: 'text', text: `Error: ${e.message}` }] };
+    }
   }
 );
 
@@ -374,10 +432,14 @@ server.tool(
     label: z.string().optional().describe('Checkpoint label'),
   },
   async ({ label }) => {
-    sendIpc({ type: 'save_checkpoint', sessionId: SESSION_ID, label });
-    return {
-      content: [{ type: 'text', text: `Checkpoint saved${label ? ': ' + label : ''}` }],
-    };
+    try {
+      const response = await ipcRequest({ type: 'save_checkpoint', sessionId: SESSION_ID, label });
+      return {
+        content: [{ type: 'text', text: `Checkpoint saved: ${response.filepath}` }],
+      };
+    } catch (e) {
+      return { content: [{ type: 'text', text: `Error: ${e.message}` }] };
+    }
   }
 );
 

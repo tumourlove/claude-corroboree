@@ -7,7 +7,9 @@ class Scratchpad {
     this.data = new Map();
     this.filePath = path.join(os.homedir(), '.claude-nexus', 'scratchpad.json');
     this._saveTimer = null;
+    this._cleanupTimer = null;
     this._load();
+    this._startPeriodicCleanup();
   }
 
   set(key, value, namespace = 'default') {
@@ -31,8 +33,29 @@ class Scratchpad {
     return keys;
   }
 
+  listKeys(namespace) {
+    const prefix = namespace ? `${namespace}:` : '';
+    const keys = [];
+    for (const [k, v] of this.data) {
+      if (!namespace || k.startsWith(prefix)) {
+        keys.push({ key: k.replace(prefix, ''), updatedAt: v.updatedAt });
+      }
+    }
+    return keys;
+  }
+
   delete(key, namespace = 'default') {
     this.data.delete(`${namespace}:${key}`);
+    this._scheduleSave();
+  }
+
+  clearNamespace(namespace) {
+    const prefix = `${namespace}:`;
+    for (const key of [...this.data.keys()]) {
+      if (key.startsWith(prefix)) {
+        this.data.delete(key);
+      }
+    }
     this._scheduleSave();
   }
 
@@ -54,6 +77,21 @@ class Scratchpad {
     }
   }
 
+  _startPeriodicCleanup() {
+    // Clean _results entries older than 1 hour, every 10 minutes
+    this._cleanupTimer = setInterval(() => {
+      const oneHourAgo = Date.now() - 60 * 60 * 1000;
+      let changed = false;
+      for (const [k, v] of this.data) {
+        if (k.startsWith('_results:') && v.updatedAt < oneHourAgo) {
+          this.data.delete(k);
+          changed = true;
+        }
+      }
+      if (changed) this._scheduleSave();
+    }, 10 * 60 * 1000);
+  }
+
   _scheduleSave() {
     if (this._saveTimer) clearTimeout(this._saveTimer);
     this._saveTimer = setTimeout(() => this._save(), 1000);
@@ -67,6 +105,12 @@ class Scratchpad {
     } catch (e) {
       // Ignore write errors
     }
+  }
+
+  destroy() {
+    if (this._cleanupTimer) clearInterval(this._cleanupTimer);
+    if (this._saveTimer) clearTimeout(this._saveTimer);
+    this._save(); // flush pending writes
   }
 }
 

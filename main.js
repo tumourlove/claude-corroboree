@@ -269,6 +269,7 @@ app.whenReady().then(() => {
 });
 app.on('window-all-closed', () => {
   if (ipcServer) ipcServer.stop();
+  if (scratchpad) scratchpad.destroy();
   if (sessionManager) sessionManager.destroy();
   app.quit();
 });
