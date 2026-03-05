@@ -247,8 +247,8 @@ export class Dashboard {
 
   // --- Mood Detection ---
   static MOOD_PATTERNS = [
-    { mood: 'frustrated', icon: '\u{1F534}', patterns: /\b(error|failed|FAIL|ERR!|exception|fatal|panic|stderr)\b/i },
-    { mood: 'satisfied', icon: '\u{1F7E2}', patterns: /\b(PASS|passed|succeed|success|All tests|\u2713|\u2714)\b/i },
+    { mood: 'frustrated', icon: '\u{1F534}', patterns: /(error\b|failed\b|FAIL\b|ERR!|exception\b|fatal\b|panic\b|stderr\b)/i },
+    { mood: 'satisfied', icon: '\u{1F7E2}', patterns: /\b(PASS|passed|succeed|success|All tests|\u2713|\u2714)/i },
     { mood: 'working', icon: '\u{1F527}', patterns: /\b(compiling|bundling|building|webpack|esbuild|tsc|compil)\b/i },
     { mood: 'investigating', icon: '\u{1F50D}', patterns: /\b(searching|reading|exploring|scanning|analyzing|grep|find)\b/i },
   ];
