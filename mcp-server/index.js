@@ -335,7 +335,7 @@ server.tool(
     to: z.string().describe('Target session ID'),
     type: z.enum(['blocker', 'info', 'request', 'decision', 'review']).describe('Message type'),
     subject: z.string().describe('Short summary of the message'),
-    data: z.record(z.unknown()).optional().describe('Arbitrary JSON payload'),
+    data: z.record(z.string(), z.unknown()).optional().describe('Arbitrary JSON payload'),
     priority: z.enum(['normal', 'urgent']).default('normal').describe('Message priority'),
   },
   async ({ to, type, subject, data, priority }) => {
@@ -1453,7 +1453,7 @@ server.tool(
   'Publish an event to a channel. All sessions subscribed to matching patterns will receive it.',
   {
     channel: z.string().describe('Event channel (e.g. "build:complete", "test:failed")'),
-    data: z.record(z.unknown()).optional().describe('Event payload data'),
+    data: z.record(z.string(), z.unknown()).optional().describe('Event payload data'),
   },
   async ({ channel, data }) => {
     try {
