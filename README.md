@@ -2,13 +2,13 @@
 
 A tabbed Electron terminal for running multiple Claude Code sessions in parallel with full MCP-powered coordination.
 
-![Claude Nexus](https://img.shields.io/badge/version-0.3.0-blue) ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey) ![License](https://img.shields.io/badge/license-MIT-green)
+![Claude Nexus](https://img.shields.io/badge/version-0.4.0-blue) ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ## What It Does
 
 Nexus lets you run multiple Claude Code sessions side-by-side in tabs. Each session gets an MCP server injected that gives Claude the ability to talk to other sessions, spawn workers, share state, and coordinate complex multi-session workflows — all automatically.
 
-The **Lead** session breaks tasks into subtasks, spawns worker sessions, monitors progress, and collects results. Workers report back when done. Sessions share a scratchpad, task queue, knowledge base, and file locks for coordination.
+The **Lead** session breaks tasks into subtasks, spawns worker sessions, monitors progress, and collects results. Workers report back when done. Sessions share a scratchpad, task queue, knowledge base, knowledge graph, and file locks for coordination.
 
 ## Features
 
@@ -18,21 +18,33 @@ The **Lead** session breaks tasks into subtasks, spawns worker sessions, monitor
 - Shift+Enter for multi-line Claude Code input
 - Image paste from clipboard (saves to temp file, pastes path)
 - Help dropdown with all shortcuts (F1 or ? button)
+- Terminal search (Ctrl+Shift+F) with match navigation
+- Tab context menu (right-click: rename, duplicate, copy ID, close others)
+- Session avatars with unique personality colors per session
+- Tab entrance animations and completion shimmer effects
+- Terminal font zoom (Ctrl+=/-)
 
-### MCP Coordination (34 Tools)
+### MCP Coordination (~70 Tools)
 Each session automatically gets tools for coordination, gated by template permissions:
 
 | Category | Tools |
 |----------|-------|
-| **Communication** | `list_sessions`, `send_message`, `read_messages`, `broadcast` |
-| **Orchestration** | `spawn_session`, `spawn_explorer`, `wait_for_workers`, `get_session_status`, `report_result` |
-| **Task Queue** | `push_task`, `pull_task`, `update_task`, `list_tasks` |
+| **Communication** | `list_sessions`, `send_message`, `read_messages`, `broadcast`, `structured_message` |
+| **Orchestration** | `spawn_session`, `spawn_explorer`, `spawn_workers`, `wait_for_workers`, `get_session_status`, `report_result` |
+| **Task Queue** | `push_task`, `pull_task`, `update_task`, `list_tasks`, `get_task_graph` |
 | **File Coordination** | `claim_file`, `release_file`, `list_locks`, `share_snippet`, `get_snippet` |
 | **Knowledge Base** | `kb_add`, `kb_search`, `kb_list` |
-| **Progress & Context** | `stream_progress`, `request_context_handoff`, `report_handoff`, `save_checkpoint` |
-| **Shared State** | `scratchpad_set`, `scratchpad_get`, `scratchpad_list`, `scratchpad_delete` |
+| **Knowledge Graph** | `kg_add_entity`, `kg_add_relationship`, `kg_query`, `kg_traverse`, `kg_export` |
+| **Progress & Context** | `stream_progress`, `request_context_handoff`, `report_handoff`, `save_checkpoint`, `context_estimate` |
+| **Shared State** | `scratchpad_set`, `scratchpad_get`, `scratchpad_list`, `scratchpad_delete`, `batch_scratchpad`, `scratchpad_cas` |
 | **History** | `read_session_history`, `search_across_sessions` |
-| **Session Lifecycle** | `reset_session`, `merge_worker`, `list_worktrees` |
+| **Session Lifecycle** | `reset_session`, `merge_worker`, `list_worktrees`, `session_info`, `query_git_status`, `get_worker_diff` |
+| **Events** | `subscribe`, `unsubscribe`, `publish` |
+| **Code Review** | `submit_for_review`, `claim_review`, `approve_review`, `request_changes`, `list_reviews` |
+| **Consensus** | `propose_decision`, `vote`, `resolve_decision`, `list_decisions` |
+| **Session Memory** | `remember`, `recall`, `get_lineage` |
+| **Capabilities** | `promote_session`, `demote_session`, `request_promotion` |
+| **Task Discovery** | `propose_task`, `list_proposals`, `review_proposal` |
 
 ### Session Templates & Personalities
 Each session has a role with enforced tool permissions and a distinct personality:
@@ -45,12 +57,51 @@ Each session has a role with enforced tool permissions and a distinct personalit
 | **Reviewer** | 🔍 | Critical eye — reviews, gives constructive feedback | Researcher tools + messaging |
 | **Explorer** | 🗺️ | Big-picture observer — cross-session connections | List, history, search only |
 
+Sessions can be promoted or demoted at runtime with `promote_session`/`demote_session`, and workers can request capability upgrades via `request_promotion`.
+
+### Visual & UX (v0.4.0)
+- **Command palette** (Ctrl+Shift+P) — VS Code-style quick action search
+- **Theme system** — Dark, Midnight, and Light themes with instant switching
+- **Activity sparklines** — Dashboard cards show output velocity per session
+- **Ambient breathing background** — Subtle terminal status indication via background animation
+- **Session mood indicators** — Frustrated/investigating/working/satisfied states
+- **Orchestration timeline** — Gantt-style view of session lifespans and task flow
+- **Sound design** (Ctrl+Shift+M) — Optional audio feedback for spawn/complete/error events
+- **Toast notifications** — Pause-on-hover with history panel
+
+### Advanced Coordination (v0.4.0)
+- **Structured messages** — Type/subject/data payloads for machine-readable inter-session communication
+- **Event pub/sub** — Subscribe to channels, receive push notifications across sessions
+- **Batch worker spawn** — `spawn_workers` creates multiple workers in one call
+- **Code review pipeline** — Submit/claim/approve/request changes workflow
+- **Consensus protocols** — Propose decisions, vote, resolve with quorum
+- **Merge conflict resolution** — Structured conflict data for automated resolution
+
+### Intelligence (v0.4.0)
+- **Task DAG** — Dependency-aware task graph with failure propagation and auto-unblock
+- **Session memory** — `remember`/`recall` persists learnings across session resets
+- **Knowledge graph** — Entities, relationships, traversal queries for project understanding
+- **Context awareness** — `context_estimate` lets sessions know their context usage level
+- **Adaptive templates** — Promote/demote session capabilities at runtime
+- **Emergent task discovery** — Workers propose new tasks bottom-up via `propose_task`
+- **Session recipes** — `.nexus-recipe.json` for predefined multi-session configurations
+
+### Reliability (v0.4.0)
+- **Single-instance lock** — Prevents duplicate Nexus instances
+- **Startup self-check** — Validates claude/git CLI availability before launch
+- **Atomic scratchpad writes** — Prevents corruption on crash
+- **Worktree orphan cleanup** — Stale worktrees cleaned on startup
+- **IPC reconnection** — Exponential backoff with message buffering
+- **Memory pruning** — 100 message cap per inbox, auto-cleanup
+- **Structured logging** — Consistent log format throughout codebase
+- **Cost & token tracking** — Parses Claude Code output for usage metrics
+- **ARIA accessibility** — Screen reader attributes throughout the UI
+
 ### Reliability (v0.3.0)
 - **Session heartbeats** — 10s pings with health dashboard (green/yellow/red pulse)
 - **Auto-retry with backoff** — Failed workers retry up to 3x (2s, 8s, 30s delays)
-- **IPC reconnection** — MCP servers auto-reconnect with message buffering on disconnect
 - **Auto-checkpointing** — Session state saved every 5 minutes, crash recovery dialog
-- **Template permissions** — Tool access enforced per role (researchers can't spawn, etc.)
+- **Template permissions** — Tool access enforced per role
 
 ### Smart Coordination (v0.3.0)
 - **Structured task queue** — Priority-based tasks with dependencies and auto-assignment
@@ -62,9 +113,10 @@ Each session has a role with enforced tool permissions and a distinct personalit
 - **Git worktree per worker** — Workers auto-get isolated branches, lead merges results
 
 ### Panels
-- **Dashboard** (Ctrl+Shift+D) — Session health, task board, dependency graph, progress bars, stats, badges
+- **Dashboard** (Ctrl+Shift+D) — Session health, task board, dependency graph, progress bars, sparklines, stats, badges
 - **History** (Ctrl+Shift+H) — Session logs with replay mode (color-coded timeline)
 - **Chat Sidebar** (Ctrl+Shift+C) — Live inter-session message feed with user injection
+- **Orchestration Timeline** — Gantt-style session lifespan visualization
 
 ### Autopilot
 - **Live preview cards** — Dashboard shows last 5 lines of each session's output
@@ -96,6 +148,11 @@ Each session has a role with enforced tool permissions and a distinct personalit
 | Ctrl+Shift+D | Dashboard panel |
 | Ctrl+Shift+H | History panel |
 | Ctrl+Shift+C | Chat sidebar |
+| Ctrl+Shift+F | Terminal search |
+| Ctrl+Shift+P | Command palette |
+| Ctrl+Shift+M | Toggle sound |
+| Ctrl+= / Ctrl+- | Font zoom in / out |
+| Ctrl+0 | Reset font zoom |
 | Ctrl+C | Copy selection (or SIGINT if no selection) |
 | Ctrl+V | Paste text or image |
 | Ctrl+X | Cut selection |
@@ -142,29 +199,32 @@ Produces Windows NSIS installer and portable exe in `release/`.
 ## How It Works
 
 ```
-┌──────────────────────────────────────────────────────┐
-│  Electron (main.js)                                  │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐           │
-│  │ Session 1 │  │ Session 2 │  │ Session 3 │          │
-│  │ 🎯 Lead  │  │ o7 Worker│  │ o7 Worker│           │
-│  │ node-pty │  │ node-pty │  │ node-pty │           │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘           │
-│       │              │              │                 │
-│  ┌────┴─────┐  ┌────┴─────┐  ┌────┴─────┐           │
-│  │ MCP Srv  │  │ MCP Srv  │  │ MCP Srv  │           │
-│  │ (34 tools)│ │(permissioned)│(permissioned)│       │
-│  └────┬─────┘  └────┴─────┘  └────┴─────┘           │
-│       │              │              │                 │
-│  ┌────┴──────────────┴──────────────┴─────────────┐  │
-│  │      Named Pipe IPC (message broker)           │  │
-│  └────────────────────┬───────────────────────────┘  │
-│                       │                               │
-│  ┌────────────────────┴───────────────────────────┐  │
-│  │  SessionManager · TaskQueue · KnowledgeBase    │  │
-│  │  Scratchpad · ConflictDetector · CheckpointMgr │  │
-│  │  HistoryManager · NotificationManager          │  │
-│  └────────────────────────────────────────────────┘  │
-└──────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────┐
+│  Electron (main.js)                                       │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐                │
+│  │ Session 1 │  │ Session 2 │  │ Session 3 │               │
+│  │ 🎯 Lead  │  │ o7 Worker│  │ o7 Worker│                │
+│  │ node-pty │  │ node-pty │  │ node-pty │                │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘                │
+│       │              │              │                      │
+│  ┌────┴─────┐  ┌────┴─────┐  ┌────┴─────┐                │
+│  │ MCP Srv  │  │ MCP Srv  │  │ MCP Srv  │                │
+│  │(~70 tools)│ │(permissioned)│(permissioned)│            │
+│  └────┬─────┘  └────┴─────┘  └────┴─────┘                │
+│       │              │              │                      │
+│  ┌────┴──────────────┴──────────────┴──────────────────┐  │
+│  │         Named Pipe IPC (message broker)             │  │
+│  └─────────────────────┬───────────────────────────────┘  │
+│                        │                                   │
+│  ┌─────────────────────┴───────────────────────────────┐  │
+│  │  SessionManager · TaskQueue · KnowledgeBase         │  │
+│  │  KnowledgeGraph · SessionMemory · EventBus          │  │
+│  │  ReviewManager · ConsensusManager · CostTracker     │  │
+│  │  Scratchpad · ConflictDetector · CheckpointMgr      │  │
+│  │  HistoryManager · NotificationManager               │  │
+│  │  ThemeManager · CommandPalette                       │  │
+│  └─────────────────────────────────────────────────────┘  │
+└───────────────────────────────────────────────────────────┘
 ```
 
 Each tab spawns a Claude Code CLI process with a per-session MCP config. The MCP server connects back to Electron's main process via named pipe, which routes messages between sessions and manages shared state. Workers auto-get isolated git worktrees and template-gated tool permissions.
