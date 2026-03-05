@@ -15,6 +15,12 @@ class SessionManager {
     this.worktreeManager = new WorktreeManager();
     this.stuckThresholdMs = 60000; // 60 seconds
     this._stuckCheckInterval = setInterval(() => this._checkStuck(), 10000);
+
+    // Windows ConPTY freeze workaround: periodic resize nudges flush stuck output buffers
+    this._isWindows = process.platform === 'win32';
+    if (this._isWindows) {
+      this._conptyNudgeInterval = setInterval(() => this._nudgeConpty(), 3000);
+    }
   }
 
   createSession(id, opts) {
@@ -276,6 +282,27 @@ class SessionManager {
           id,
           lastOutputAge: Math.round((now - session.lastOutputAt) / 1000),
         });
+
+        // Auto-nudge truly stuck sessions with Enter to unblock ConPTY
+        if (!session.isLead) {
+          try { session.pty.write('\n'); } catch (e) { /* ignore */ }
+        }
+      }
+    }
+  }
+
+  // Windows ConPTY freeze workaround: trigger a no-op resize to flush output buffers.
+  // ConPTY sometimes holds output until it receives an event — a resize with the same
+  // dimensions costs nothing but forces a buffer flush.
+  _nudgeConpty() {
+    for (const [id, session] of this.sessions) {
+      if (session.status !== 'done' && session.status !== 'failed') {
+        try {
+          // Resize to same dimensions — no visual change, but flushes ConPTY buffer
+          const cols = session.pty.cols || 80;
+          const rows = session.pty.rows || 30;
+          session.pty.resize(cols, rows);
+        } catch (e) { /* session may have exited */ }
       }
     }
   }
@@ -547,6 +574,7 @@ Report your observations via report_result.`;
 
   destroy() {
     if (this._stuckCheckInterval) clearInterval(this._stuckCheckInterval);
+    if (this._conptyNudgeInterval) clearInterval(this._conptyNudgeInterval);
     for (const [id] of this.sessions) {
       this.closeSession(id);
     }
