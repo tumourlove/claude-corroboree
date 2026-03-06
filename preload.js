@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer, clipboard, nativeImage, shell } = require('electron');
+const { contextBridge, ipcRenderer } = require('electron');
 
 // Helper: register listener and return unsubscribe function
 function onIpc(channel, cb) {
@@ -8,12 +8,12 @@ function onIpc(channel, cb) {
 }
 
 contextBridge.exposeInMainWorld('nexus', {
-  // Clipboard
-  clipboardReadText: () => clipboard.readText(),
-  clipboardWriteText: (text) => clipboard.writeText(text),
-  clipboardHasImage: () => !clipboard.readImage().isEmpty(),
+  // Clipboard (routed through IPC — preload is sandboxed, no direct clipboard access)
+  clipboardReadText: () => ipcRenderer.invoke('clipboard:read-text'),
+  clipboardWriteText: (text) => ipcRenderer.invoke('clipboard:write-text', text),
+  clipboardHasImage: () => ipcRenderer.invoke('clipboard:has-image'),
   saveClipboardImage: () => ipcRenderer.invoke('clipboard:save-image'),
-  openExternal: (url) => shell.openExternal(url),
+  openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
 
   createSession: (id, label, options = {}) =>
     ipcRenderer.send('session:create', { id, label, ...options }),

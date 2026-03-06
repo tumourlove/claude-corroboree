@@ -6,7 +6,7 @@ process.on('unhandledRejection', (err) => {
   console.error('Unhandled rejection:', err);
 });
 
-const { app, BrowserWindow, ipcMain, dialog, clipboard } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, clipboard, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -54,9 +54,10 @@ function createWindow() {
   checkpointManager.writePidFile();
   checkpointManager.startAutoCheckpoint(sessionManager);
 
-  // Capture terminal output for history
+  // Capture terminal output for history + context tracking
   sessionManager.onOutput = (id, data) => {
     historyManager.appendOutput(id, data);
+    if (ipcServer) ipcServer.trackOutput(id, data);
   };
 
   ipcServer = new IpcServer({
@@ -265,6 +266,12 @@ ipcMain.handle('app:load-recipes', async (_e, { projectPath }) => {
     return null;
   }
 });
+
+// Clipboard operations (must be in main process — preload is sandboxed)
+ipcMain.handle('clipboard:read-text', () => clipboard.readText());
+ipcMain.handle('clipboard:write-text', (_e, text) => clipboard.writeText(text));
+ipcMain.handle('clipboard:has-image', () => !clipboard.readImage().isEmpty());
+ipcMain.handle('shell:open-external', (_e, url) => shell.openExternal(url));
 
 // Save clipboard image to temp file and return path
 ipcMain.handle('clipboard:save-image', async () => {

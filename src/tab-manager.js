@@ -184,14 +184,14 @@ export class TabManager {
       // Ctrl+V: paste text or image
       if (e.ctrlKey && e.key === 'v') {
         (async () => {
-          if (window.nexus.clipboardHasImage()) {
-            const imgPath = await window.nexus.saveClipboardImage();
-            if (imgPath) {
-              window.nexus.terminalWrite(id, imgPath);
-              return;
-            }
+          // Try image paste first (checks clipboard in main process)
+          const imgPath = await window.nexus.saveClipboardImage();
+          if (imgPath) {
+            window.nexus.terminalWrite(id, imgPath);
+            return;
           }
-          const text = window.nexus.clipboardReadText();
+          // Fall back to text paste
+          const text = await window.nexus.clipboardReadText();
           if (text) window.nexus.terminalWrite(id, text);
         })();
         return false;
