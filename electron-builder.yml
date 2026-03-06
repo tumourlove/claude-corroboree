@@ -1,5 +1,5 @@
-appId: com.corroboree.app
-productName: Corroboree
+appId: com.claude-corroboree.app
+productName: Claude Corroboree
 icon: assets/icon-256.png
 directories:
   output: release
@@ -25,7 +25,7 @@ win:
   icon: assets/icon.ico
   signAndEditExecutable: false
 nsis:
-  artifactName: "Corroboree-Setup-${version}.${ext}"
+  artifactName: "Claude-Corroboree-Setup-${version}.${ext}"
   oneClick: false
   perMachine: false
   allowElevation: false

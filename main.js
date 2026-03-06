@@ -368,7 +368,7 @@ ipcMain.on('notifications:set-enabled', (_event, enabled) => {
   if (notificationManager) notificationManager.setEnabled(enabled);
 });
 
-app.setAppUserModelId('com.corroboree.app');
+app.setAppUserModelId('com.claude-corroboree.app');
 
 app.whenReady().then(() => {
   // Check for unclean shutdown and offer recovery

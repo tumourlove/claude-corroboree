@@ -64,9 +64,9 @@ npm run build
 
 # 4. Create GitHub release WITH assets
 gh release create vX.Y.Z \
-  "release/Corroboree-Setup-X.Y.Z.exe" \
-  "release/Corroboree-Setup-X.Y.Z.exe.blockmap" \
-  "release/Corroboree X.Y.Z.exe" \
+  "release/Claude-Corroboree-Setup-X.Y.Z.exe" \
+  "release/Claude-Corroboree-Setup-X.Y.Z.exe.blockmap" \
+  "release/Claude Corroboree X.Y.Z.exe" \
   "release/latest.yml" \
   --title "vX.Y.Z — Title" --notes "Release notes here"
 
