@@ -1,12 +1,12 @@
-# Claude Nexus
+# Claude Corroboree
 
 A tabbed Electron terminal for running multiple Claude Code sessions in parallel with full MCP-powered coordination.
 
-![Claude Nexus](https://img.shields.io/badge/version-0.4.1-blue) ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey) ![License](https://img.shields.io/badge/license-MIT-green)
+![Claude Corroboree](https://img.shields.io/badge/version-0.4.2-blue) ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ## What It Does
 
-Nexus lets you run multiple Claude Code sessions side-by-side in tabs. Each session gets an MCP server injected that gives Claude the ability to talk to other sessions, spawn workers, share state, and coordinate complex multi-session workflows — all automatically.
+Corroboree lets you run multiple Claude Code sessions side-by-side in tabs. Each session gets an MCP server injected that gives Claude the ability to talk to other sessions, spawn workers, share state, and coordinate complex multi-session workflows — all automatically.
 
 The **Lead** session breaks tasks into subtasks, spawns worker sessions, monitors progress, and collects results. Workers report back when done. Sessions share a scratchpad, task queue, knowledge base, knowledge graph, and file locks for coordination.
 
@@ -60,7 +60,7 @@ Each session has a role with enforced tool permissions and a distinct personalit
 Sessions can be promoted or demoted at runtime with `promote_session`/`demote_session`, and workers can request capability upgrades via `request_promotion`.
 
 ### Built-in Orchestration Skills
-Nexus ships with `.claude/skills/` that teach sessions how to coordinate effectively:
+Corroboree ships with `.claude/skills/` that teach sessions how to coordinate effectively:
 
 | Skill | Purpose |
 |-------|---------|
@@ -97,10 +97,10 @@ Nexus ships with `.claude/skills/` that teach sessions how to coordinate effecti
 - **Context awareness** — `context_estimate` lets sessions know their context usage level
 - **Adaptive templates** — Promote/demote session capabilities at runtime
 - **Emergent task discovery** — Workers propose new tasks bottom-up via `propose_task`
-- **Session recipes** — `.nexus-recipe.json` for predefined multi-session configurations
+- **Session recipes** — `.corroboree-recipe.json` for predefined multi-session configurations
 
 ### Reliability
-- **Single-instance lock** — Prevents duplicate Nexus instances
+- **Single-instance lock** — Prevents duplicate Corroboree instances
 - **Startup self-check** — Validates claude/git CLI availability before launch
 - **Atomic scratchpad writes** — Prevents corruption on crash
 - **Worktree orphan cleanup** — Stale worktrees cleaned on startup
@@ -145,8 +145,8 @@ Nexus ships with `.claude/skills/` that teach sessions how to coordinate effecti
 - Git worktree isolation (automatic for workers in git repos)
 - System tray + in-app toast notifications
 - Auto-update from GitHub Releases
-- Windows Explorer "Open in Claude Nexus" context menu
-- `nexus` command in Explorer address bar and Win+R
+- Windows Explorer "Open in Claude Corroboree" context menu
+- `corroboree` command in Explorer address bar and Win+R
 
 ## Keyboard Shortcuts
 
@@ -196,8 +196,8 @@ node scripts/register-shell.js
 ```
 
 This adds:
-- Right-click "Open in Claude Nexus" on folders
-- `nexus` command in Explorer address bar and Win+R
+- Right-click "Open in Claude Corroboree" on folders
+- `corroboree` command in Explorer address bar and Win+R
 
 ### Build Installer
 
