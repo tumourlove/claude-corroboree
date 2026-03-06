@@ -36,7 +36,7 @@ function createWindow() {
     width: 1200,
     height: 800,
     backgroundColor: '#1a1a2e',
-    icon: path.join(__dirname, 'assets', 'icon-256.png'),
+    icon: path.join(__dirname, 'assets', 'icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -75,6 +75,7 @@ function createWindow() {
       mainWindow.webContents.send('session:spawn-requested', {
         id, label, cwd, initialPrompt, template,
       });
+      return id;
     },
   });
 
@@ -291,38 +292,48 @@ function setupAutoUpdater() {
   autoUpdater.autoInstallOnAppQuit = true;
 
   autoUpdater.on('update-available', (info) => {
-    mainWindow.webContents.send('updater:available', {
-      version: info.version,
-      releaseNotes: info.releaseNotes,
-    });
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('updater:available', {
+        version: info.version,
+        releaseNotes: info.releaseNotes,
+      });
+    }
   });
 
   autoUpdater.on('update-not-available', () => {
-    mainWindow.webContents.send('updater:up-to-date');
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('updater:up-to-date');
+    }
   });
 
   autoUpdater.on('download-progress', (progress) => {
-    mainWindow.webContents.send('updater:progress', {
-      percent: Math.round(progress.percent),
-    });
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('updater:progress', {
+        percent: Math.round(progress.percent),
+      });
+    }
   });
 
   autoUpdater.on('update-downloaded', (info) => {
-    mainWindow.webContents.send('updater:ready');
-    dialog.showMessageBox(mainWindow, {
-      type: 'info',
-      title: 'Update Ready',
-      message: `Claude Corroboree v${info.version} has been downloaded.`,
-      detail: 'Restart now to apply the update?',
-      buttons: ['Restart Now', 'Later'],
-      defaultId: 0,
-    }).then(({ response }) => {
-      if (response === 0) autoUpdater.quitAndInstall();
-    });
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('updater:ready');
+      dialog.showMessageBox(mainWindow, {
+        type: 'info',
+        title: 'Update Ready',
+        message: `Claude Corroboree v${info.version} has been downloaded.`,
+        detail: 'Restart now to apply the update?',
+        buttons: ['Restart Now', 'Later'],
+        defaultId: 0,
+      }).then(({ response }) => {
+        if (response === 0) autoUpdater.quitAndInstall();
+      });
+    }
   });
 
   autoUpdater.on('error', (err) => {
-    mainWindow.webContents.send('updater:error', { message: err.message });
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('updater:error', { message: err.message });
+    }
   });
 
   // Check for updates after a short delay
@@ -400,9 +411,9 @@ app.on('window-all-closed', () => {
     checkpointManager.clearCheckpoints();
     checkpointManager.destroy();
   }
+  if (sessionManager) sessionManager.destroy();
   if (ipcServer) ipcServer.stop();
   if (scratchpad) scratchpad.destroy();
   if (ipcServer && ipcServer.knowledgeBase) ipcServer.knowledgeBase.destroy();
-  if (sessionManager) sessionManager.destroy();
   app.quit();
 });

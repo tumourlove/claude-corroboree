@@ -2,6 +2,7 @@ const pty = require('node-pty');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const crypto = require('crypto');
 const { WorktreeManager } = require('./worktree-manager');
 const { Logger } = require('./logger');
 
@@ -58,7 +59,8 @@ class SessionManager {
     fs.writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig, null, 2));
 
     // Build claude CLI args
-    const args = ['--mcp-config', mcpConfigPath];
+    const claudeSessionId = crypto.randomUUID();
+    const args = ['--session-id', claudeSessionId, '--mcp-config', mcpConfigPath];
 
     // Workers auto-accept permissions since the lead already authorized their task
     if (!isLead) {
@@ -90,6 +92,12 @@ class SessionManager {
       useConpty: true,
     });
 
+    // Compute path to Claude Code's JSONL transcript for context tracking
+    // Claude Code stores transcripts at ~/.claude/projects/{dir-key}/{session-uuid}.jsonl
+    // where dir-key replaces ':' and path separators with '-'
+    const projectDirKey = resolvedCwd.replace(/[:\\/]/g, '-');
+    const claudeJsonlPath = path.join(os.homedir(), '.claude', 'projects', projectDirKey, `${claudeSessionId}.jsonl`);
+
     const session = {
       id,
       pty: ptyProc,
@@ -100,6 +108,8 @@ class SessionManager {
       isLead,
       mcpConfigPath,
       worktree: worktreeInfo,
+      claudeSessionId,
+      claudeJsonlPath,
       createdAt: Date.now(),
       lastOutputAt: Date.now(),
       initialPrompt: initialPrompt || null,
@@ -108,7 +118,7 @@ class SessionManager {
     };
 
     ptyProc.onData((data) => {
-      this.mainWindow.webContents.send(`terminal:data:${id}`, data);
+      this._send(`terminal:data:${id}`, data);
       if (this.onOutput) this.onOutput(id, data);
 
       // Buffer output for retry context
@@ -121,11 +131,14 @@ class SessionManager {
       // Track activity for status detection
       session.lastOutputAt = Date.now();
 
-      // Detect idle state (prompt character visible)
-      if (data.includes('\u276f') || data.includes('❯')) {
-        this.updateStatus(id, 'idle');
-      } else if (session.status === 'idle') {
-        this.updateStatus(id, 'working');
+      // Don't transition from terminal/transitional states
+      if (!['done', 'failed', 'retrying', 'closing'].includes(session.status)) {
+        // Detect idle state (prompt character visible)
+        if (data.includes('\u276f') || data.includes('❯')) {
+          this.updateStatus(id, 'idle');
+        } else if (session.status === 'idle') {
+          this.updateStatus(id, 'working');
+        }
       }
 
       // Push preview lines to dashboard
@@ -134,7 +147,7 @@ class SessionManager {
 
     ptyProc.onExit(({ exitCode }) => {
       const sess = this.sessions.get(id);
-      if (!sess) return;
+      if (!sess || sess.closing) return;
       // Skip if this PTY was replaced by respawnSession (a new PTY now owns this session ID)
       if (sess.pty !== ptyProc) return;
 
@@ -145,7 +158,7 @@ class SessionManager {
         sess.retryCount++;
         sess.status = 'retrying';
 
-        this.mainWindow.webContents.send('session:status', {
+        this._send('session:status', {
           id, status: 'retrying', retryCount: sess.retryCount, maxRetries: sess.maxRetries,
         });
 
@@ -166,8 +179,8 @@ class SessionManager {
         }, delay);
       } else if (exitCode !== 0 && !sess.isLead) {
         sess.status = 'failed';
-        this.mainWindow.webContents.send('session:status', { id, status: 'failed' });
-        this.mainWindow.webContents.send('session:exited', { id, exitCode });
+        this._send('session:status', { id, status: 'failed' });
+        this._send('session:exited', { id, exitCode });
         this._cleanup(id);
 
         // Notify lead via callback
@@ -181,14 +194,14 @@ class SessionManager {
         }
       } else {
         sess.status = 'done';
-        this.mainWindow.webContents.send('session:status', { id, status: 'done' });
-        this.mainWindow.webContents.send('session:exited', { id, exitCode });
+        this._send('session:status', { id, status: 'done' });
+        this._send('session:exited', { id, exitCode });
         this._cleanup(id);
       }
     });
 
     this.sessions.set(id, session);
-    this.mainWindow.webContents.send('session:created', {
+    this._send('session:created', {
       id, label, template: session.template, isLead,
     });
 
@@ -198,6 +211,7 @@ class SessionManager {
   closeSession(id) {
     const session = this.sessions.get(id);
     if (session) {
+      session.closing = true;
       session.pty.kill();
       this._cleanup(id);
     }
@@ -250,6 +264,7 @@ class SessionManager {
       initialPrompt: session.initialPrompt,
       retryCount: session.retryCount || 0,
       maxRetries: session.maxRetries || 3,
+      claudeJsonlPath: session.claudeJsonlPath || null,
     };
   }
 
@@ -261,7 +276,7 @@ class SessionManager {
     const session = this.sessions.get(id);
     if (session) {
       session.status = status;
-      this.mainWindow.webContents.send('session:status', { id, status });
+      this._send('session:status', { id, status });
     }
   }
 
@@ -281,7 +296,7 @@ class SessionManager {
         if (session._lastStuckWarning && (now - session._lastStuckWarning) < 300000) continue;
         session._lastStuckWarning = now;
         this.updateStatus(id, 'stuck');
-        this.mainWindow.webContents.send('session:stuck-warning', {
+        this._send('session:stuck-warning', {
           id,
           lastOutputAge: Math.round((now - session.lastOutputAt) / 1000),
         });
@@ -330,7 +345,7 @@ class SessionManager {
       session._previewTimer = setTimeout(() => {
         session._previewTimer = null;
         const lines = session._previewBuffer.split('\n').filter(l => l.trim()).slice(-5);
-        this.mainWindow.webContents.send('session:output-preview', { id, lines });
+        this._send('session:output-preview', { id, lines });
       }, 500);
     }
   }
@@ -577,6 +592,12 @@ You're the team's eagle-eyed observer who sees patterns others miss.
     };
   }
 
+  _send(channel, ...args) {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send(channel, ...args);
+    }
+  }
+
   _getIpcPath() {
     // Named pipe on Windows, Unix socket elsewhere
     if (os.platform() === 'win32') {
@@ -594,7 +615,7 @@ You're the team's eagle-eyed observer who sees patterns others miss.
       try { fs.unlinkSync(session.mcpConfigPath); } catch (e) { /* ignore */ }
       // Clean up worktree if one was created
       if (session.worktree) {
-        this.worktreeManager.removeWorktree(id);
+        try { this.worktreeManager.removeWorktree(id); } catch (e) { /* already cleaned */ }
       }
       this.sessions.delete(id);
     }
@@ -603,9 +624,8 @@ You're the team's eagle-eyed observer who sees patterns others miss.
   destroy() {
     if (this._stuckCheckInterval) clearInterval(this._stuckCheckInterval);
     if (this._conptyNudgeInterval) clearInterval(this._conptyNudgeInterval);
-    for (const [id] of this.sessions) {
-      this.closeSession(id);
-    }
+    const ids = [...this.sessions.keys()];
+    for (const id of ids) this.closeSession(id);
     this.worktreeManager.cleanup();
   }
 }

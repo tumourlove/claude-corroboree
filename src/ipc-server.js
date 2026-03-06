@@ -10,15 +10,6 @@ const { SessionMemory } = require('./session-memory');
 const { KnowledgeGraph } = require('./knowledge-graph');
 const { Logger } = require('./logger');
 
-// Strip ANSI escape sequences for accurate byte counting
-function stripAnsi(str) {
-  return str.replace(/\x1b\[[0-9;]*[a-zA-Z?]/g, '')   // CSI sequences
-            .replace(/\x1b\][^\x07]*\x07/g, '')         // OSC sequences
-            .replace(/\x1b[()][0-9A-Z]/g, '')            // Character set
-            .replace(/\x1b[>=<]/g, '')                    // Mode changes
-            .replace(/\x1b\[[\?]?[0-9;]*[hlrstuf]/g, '') // Private modes
-            .replace(/[\x00-\x08\x0e-\x1f]/g, '');       // Control chars (keep \n \r \t)
-}
 
 class IpcServer {
   constructor({ sessionManager, scratchpad, historyManager, conflictDetector, taskQueue, notificationManager, onSpawnRequest }) {
@@ -32,7 +23,6 @@ class IpcServer {
     this.clients = new Map(); // sessionId -> socket
     this.server = null;
     this.results = new Map(); // sessionId -> { result, status, timestamp }
-    this.spawnedWorkers = new Set(); // track worker session IDs
     this.heartbeats = new Map(); // sessionId -> { timestamp }
     this.knowledgeBase = null; // initialized when first session provides a cwd
     this.knowledgeGraph = null; // initialized alongside knowledgeBase
@@ -64,46 +54,79 @@ class IpcServer {
     }
   }
 
-  // W9: track output bytes for context estimation
-  trackOutput(sessionId, data) {
+  // Track output and periodically push context estimate to renderer
+  trackOutput(sessionId, _data) {
     const stats = this.sessionStats.get(sessionId);
-    if (stats) {
-      if (!stats.outputBytes) stats.outputBytes = 0;
-      stats.outputBytes += Buffer.byteLength(stripAnsi(typeof data === 'string' ? data : data.toString()));
+    if (!stats) return;
 
-      // Throttled push to renderer — update context bar every 5 seconds max per session
-      if (!stats._ctxPushTimer) {
-        stats._ctxPushTimer = setTimeout(() => {
-          stats._ctxPushTimer = null;
-          if (this.sessionManager.mainWindow) {
-            const estimate = this.getContextEstimate(sessionId);
-            this.sessionManager.mainWindow.webContents.send('session:context-update', {
-              id: sessionId,
-              percent: estimate.estimated_context_percent,
-            });
-          }
-        }, 5000);
-      }
+    // Throttled push to renderer — update context bar every 5 seconds max per session
+    if (!stats._ctxPushTimer) {
+      stats._ctxPushTimer = setTimeout(() => {
+        stats._ctxPushTimer = null;
+        if (this.sessionManager.mainWindow) {
+          const estimate = this.getContextEstimate(sessionId);
+          this.sessionManager.mainWindow.webContents.send('session:context-update', {
+            id: sessionId,
+            percent: estimate.estimated_context_percent,
+          });
+        }
+      }, 5000);
     }
   }
 
-  // W9: context window usage estimate
+  // Parse Claude Code's JSONL transcript to get real context window usage
   getContextEstimate(sessionId) {
-    const stats = this.sessionStats.get(sessionId) || {};
-    const outputBytes = stats.outputBytes || 0;
-    // ~200K token context ≈ 800KB text. Terminal output is ~60% of context usage.
-    // With ANSI stripped, ~256KB of clean text ≈ full context (calibrated from real sessions).
-    const estimatedPercent = Math.min(100, Math.round(outputBytes / 256000 * 100));
-    let level;
-    if (estimatedPercent < 40) level = 'low';
-    else if (estimatedPercent < 65) level = 'medium';
-    else if (estimatedPercent < 85) level = 'high';
-    else level = 'critical';
-    return {
-      output_bytes: outputBytes,
-      estimated_context_percent: estimatedPercent,
-      level,
-    };
+    const session = this.sessionManager.sessions.get(sessionId);
+    const jsonlPath = session && session.claudeJsonlPath;
+
+    if (!jsonlPath || !fs.existsSync(jsonlPath)) {
+      return { estimated_context_percent: 0, level: 'low' };
+    }
+
+    try {
+      // Read last ~8KB of the JSONL file to find the most recent usage entry
+      const stat = fs.statSync(jsonlPath);
+      const readSize = Math.min(stat.size, 8192);
+      const fd = fs.openSync(jsonlPath, 'r');
+      const buf = Buffer.alloc(readSize);
+      fs.readSync(fd, buf, 0, readSize, Math.max(0, stat.size - readSize));
+      fs.closeSync(fd);
+
+      const tail = buf.toString('utf8');
+      const lines = tail.split('\n').filter(l => l.includes('"input_tokens"'));
+
+      if (lines.length === 0) {
+        return { estimated_context_percent: 0, level: 'low' };
+      }
+
+      // Parse the last line containing usage data
+      const lastLine = lines[lines.length - 1];
+      // Extract usage fields with regex — faster than JSON.parse on large lines
+      const get = (key) => {
+        const m = lastLine.match(new RegExp(`"${key}":(\\d+)`));
+        return m ? parseInt(m[1], 10) : 0;
+      };
+
+      const inputTokens = get('input_tokens');
+      const cacheCreation = get('cache_creation_input_tokens');
+      const cacheRead = get('cache_read_input_tokens');
+      const outputTokens = get('output_tokens');
+
+      // Total tokens consumed in the context window
+      const totalTokens = inputTokens + cacheCreation + cacheRead + outputTokens;
+      const contextWindowSize = 200000; // Claude Opus/Sonnet context window
+      const estimatedPercent = Math.min(100, Math.round(totalTokens / contextWindowSize * 100));
+
+      let level;
+      if (estimatedPercent < 40) level = 'low';
+      else if (estimatedPercent < 65) level = 'medium';
+      else if (estimatedPercent < 85) level = 'high';
+      else level = 'critical';
+
+      return { estimated_context_percent: estimatedPercent, total_tokens: totalTokens, level };
+    } catch (e) {
+      return { estimated_context_percent: 0, level: 'low' };
+    }
   }
 
   getIpcPath() {
@@ -137,6 +160,12 @@ class IpcServer {
       if (sessionId) {
         this.clients.delete(sessionId);
         if (this.conflictDetector) this.conflictDetector.clearSession(sessionId);
+        // Clear context push timer to prevent leaks
+        const stats = this.sessionStats.get(sessionId);
+        if (stats && stats._ctxPushTimer) {
+          clearTimeout(stats._ctxPushTimer);
+          stats._ctxPushTimer = null;
+        }
         // W10: cleanup event subscriptions + publish close event
         this.eventBus.unsubscribeAll(sessionId);
         this._publishEvent('session:closed', { sessionId }, sessionId);
@@ -206,7 +235,6 @@ class IpcServer {
             messagesSent: 0,
             messagesReceived: 0,
             toolCalls: 0,
-            outputBytes: 0,
           });
         }
         return msg.sessionId;
@@ -348,6 +376,9 @@ class IpcServer {
       }
 
       case 'report_result': {
+        // Mark session as done
+        this.sessionManager.updateStatus(msg.sessionId, 'done');
+
         // Store result
         this.results.set(msg.sessionId, {
           result: msg.result,
@@ -414,7 +445,6 @@ class IpcServer {
         }
 
         // Check if all workers complete
-        this.spawnedWorkers.add(msg.sessionId);
         const allSessions = this.sessionManager.listSessions();
         const workers = allSessions.filter(s => !s.isLead);
         const allDone = workers.length > 0 && workers.every(w => this.results.has(w.id));
@@ -424,10 +454,13 @@ class IpcServer {
             label: w.label,
             ...this.results.get(w.id),
           }));
-          this.sessionManager.mainWindow.webContents.send('workers:all-complete', { results: allResults });
-          // Clear completed batch to free memory
-          this.results.clear();
-          this.spawnedWorkers.clear();
+          if (this.sessionManager.mainWindow && !this.sessionManager.mainWindow.isDestroyed()) {
+            this.sessionManager.mainWindow.webContents.send('workers:all-complete', { results: allResults });
+          }
+          // Clear completed batch to free memory — only clear results for these workers
+          for (const w of workers) {
+            this.results.delete(w.id);
+          }
           this.scratchpad.clearNamespace('_results');
         }
         break;
@@ -548,6 +581,8 @@ class IpcServer {
         if (this.conflictDetector) {
           const files = this.conflictDetector.getSessionFiles(msg.sessionId);
           this._reply(socket, { type: 'session_files', sessionId: msg.sessionId, files, requestId: msg.requestId });
+        } else {
+          this._reply(socket, { type: 'session_files', sessionId: msg.sessionId, files: [], requestId: msg.requestId });
         }
         break;
       }
@@ -674,6 +709,10 @@ class IpcServer {
 
       // --- File Locking ---
       case 'claim_file': {
+        if (!this.conflictDetector) {
+          this._reply(socket, { type: 'file_claimed', success: false, error: 'Conflict detector not available', requestId: msg.requestId });
+          break;
+        }
         const result = this.conflictDetector.claimFile(msg.sessionId, msg.filepath, msg.intent);
         this._reply(socket, { type: 'file_claimed', ...result, requestId: msg.requestId });
         // If conflict, notify the other session
@@ -692,12 +731,20 @@ class IpcServer {
       }
 
       case 'release_file': {
+        if (!this.conflictDetector) {
+          this._reply(socket, { type: 'file_released', released: false, error: 'Conflict detector not available', requestId: msg.requestId });
+          break;
+        }
         const released = this.conflictDetector.releaseFile(msg.sessionId, msg.filepath);
         this._reply(socket, { type: 'file_released', released, requestId: msg.requestId });
         break;
       }
 
       case 'list_locks': {
+        if (!this.conflictDetector) {
+          this._reply(socket, { type: 'locks_listed', locks: [], requestId: msg.requestId });
+          break;
+        }
         const locks = this.conflictDetector.listLocks();
         this._reply(socket, { type: 'locks_listed', locks, requestId: msg.requestId });
         break;
@@ -852,6 +899,9 @@ class IpcServer {
         const session = this.sessionManager.getSessionInfo(msg.sessionId);
         if (!session) break;
 
+        // Mark session as done before respawn
+        this.sessionManager.updateStatus(msg.sessionId, 'done');
+
         // Store handoff in knowledge base if available
         if (this.knowledgeBase) {
           this.knowledgeBase.add({
@@ -901,7 +951,9 @@ class IpcServer {
       // --- Session Cleanup ---
       case 'close_session': {
         this.sessionManager.closeSession(msg.sessionId);
-        this.sessionManager.mainWindow.webContents.send('session:force-close-tab', { id: msg.sessionId });
+        if (this.sessionManager.mainWindow && !this.sessionManager.mainWindow.isDestroyed()) {
+          this.sessionManager.mainWindow.webContents.send('session:force-close-tab', { id: msg.sessionId });
+        }
         this._reply(socket, { type: 'session_closed', sessionId: msg.sessionId, requestId: msg.requestId });
         break;
       }
@@ -912,7 +964,9 @@ class IpcServer {
         for (const s of sessions) {
           if (['done', 'failed', 'exited'].includes(s.status) && !s.isLead) {
             this.sessionManager.closeSession(s.id);
-            this.sessionManager.mainWindow.webContents.send('session:force-close-tab', { id: s.id });
+            if (this.sessionManager.mainWindow && !this.sessionManager.mainWindow.isDestroyed()) {
+              this.sessionManager.mainWindow.webContents.send('session:force-close-tab', { id: s.id });
+            }
             closed.push(s.id);
           }
         }
@@ -1564,6 +1618,24 @@ class IpcServer {
   }
 
   stop() {
+    // Clear all context push timers
+    for (const [, stats] of this.sessionStats) {
+      if (stats._ctxPushTimer) {
+        clearTimeout(stats._ctxPushTimer);
+        stats._ctxPushTimer = null;
+      }
+    }
+    // Clear heartbeat tracking
+    this.heartbeats.clear();
+    // Clear all pending ack timers
+    for (const [, pending] of this.pendingAcks) {
+      clearTimeout(pending.timer);
+    }
+    this.pendingAcks.clear();
+    // Clear reconnect state
+    if (this._reconnectAttempts) this._reconnectAttempts.clear();
+    // Close all client sockets
+    this.clients.clear();
     if (this.server) this.server.close();
   }
 }

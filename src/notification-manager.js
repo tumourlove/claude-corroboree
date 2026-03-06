@@ -1,4 +1,4 @@
-const { Notification, nativeImage } = require('electron');
+const { Notification, nativeImage, app } = require('electron');
 const path = require('path');
 
 class NotificationManager {
@@ -24,15 +24,19 @@ class NotificationManager {
 
     // System tray notification (gated by enabled flag)
     if (this.enabled && Notification.isSupported()) {
-      const iconPath = path.join(__dirname, '..', 'assets', 'icon-256.png');
+      const iconPath = app.isPackaged
+        ? path.join(process.resourcesPath, 'assets', 'icon.ico')
+        : path.join(__dirname, '..', 'assets', 'icon.ico');
       const notification = new Notification({ title, body, silent: false, icon: nativeImage.createFromPath(iconPath) });
       notification.show();
     }
 
     // In-app toast
-    this.mainWindow.webContents.send('notification:toast', {
-      title, body, type, sessionId, timestamp: Date.now(),
-    });
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+      this.mainWindow.webContents.send('notification:toast', {
+        title, body, type, sessionId, timestamp: Date.now(),
+      });
+    }
   }
 
   getHistory() {

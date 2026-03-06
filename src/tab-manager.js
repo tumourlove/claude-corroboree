@@ -31,6 +31,7 @@ export class TabManager {
 
   createTab(label = 'Session', options = {}) {
     const id = options.id || `tab-${this.nextId++}`;
+    if (this.tabs.has(id)) return id; // already exists — prevent duplicate overwrites
     const type = options.type || 'terminal';
 
     // Pane element
@@ -239,6 +240,7 @@ export class TabManager {
     // Without this, the pty spawns at 80x30 and Claude Code renders its
     // initial UI before the resize message arrives, causing layout glitches.
     requestAnimationFrame(() => {
+      if (!this.tabs.has(id)) return; // tab was closed before spawn
       fitAddon.fit();
       const cols = term.cols;
       const rows = term.rows;
@@ -292,9 +294,11 @@ export class TabManager {
       if (this.closedTabs.length > 10) this.closedTabs.shift();
     }
 
-    // Animate tab exit then remove
-    tab.tabEl.classList.add('tab-exit');
-    tab.tabEl.addEventListener('animationend', () => {
+    // Animate tab exit then remove (with timeout fallback for missing animationend)
+    let cleaned = false;
+    const cleanup = () => {
+      if (cleaned) return;
+      cleaned = true;
       if (tab.type === 'dashboard' && tab.dashboard) {
         tab.dashboard.dispose();
       } else if (tab.type === 'history' && tab.historyPanel) {
@@ -302,9 +306,12 @@ export class TabManager {
       } else if (tab.term) {
         tab.term.dispose();
       }
-      tab.termEl.remove();
-      tab.tabEl.remove();
-    }, { once: true });
+      if (tab.termEl && tab.termEl.parentNode) tab.termEl.remove();
+      if (tab.tabEl && tab.tabEl.parentNode) tab.tabEl.remove();
+    };
+    tab.tabEl.classList.add('tab-exit');
+    tab.tabEl.addEventListener('animationend', cleanup, { once: true });
+    setTimeout(() => { if (!cleaned) cleanup(); }, 500);
 
     this.tabs.delete(id);
 
@@ -317,6 +324,8 @@ export class TabManager {
       const remaining = [...this.tabs.keys()];
       if (remaining.length > 0) {
         this.activateTab(remaining[remaining.length - 1]);
+      } else {
+        this.activeTabId = null;
       }
     }
   }

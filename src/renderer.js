@@ -251,6 +251,12 @@ async function startup() {
 startup();
 
 // Toast notifications with pause-on-hover, close button, stacking, and history
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
 const toastContainer = document.getElementById('toast-container');
 const notificationHistory = [];
 const MAX_NOTIFICATION_HISTORY = 20;
@@ -272,7 +278,7 @@ function _updateHistoryBadge() {
 function _createToast(title, body, type) {
   const toast = document.createElement('div');
   toast.className = `toast toast-${type}`;
-  toast.innerHTML = `<div class="toast-header"><strong>${title}</strong><span class="toast-close">&times;</span></div><span>${body}</span>`;
+  toast.innerHTML = `<div class="toast-header"><strong>${escapeHtml(title)}</strong><span class="toast-close">&times;</span></div><span>${escapeHtml(body)}</span>`;
   toastContainer.appendChild(toast);
 
   // Close button
@@ -355,7 +361,7 @@ function _toggleNotificationHistory() {
   } else {
     panel.innerHTML = [...notificationHistory].reverse().map(n => {
       const time = new Date(n.timestamp).toLocaleTimeString();
-      return `<div class="notif-history-item notif-history-${n.type}"><span class="notif-history-time">${time}</span><strong>${n.title}</strong><span>${n.body}</span></div>`;
+      return `<div class="notif-history-item notif-history-${n.type}"><span class="notif-history-time">${time}</span><strong>${escapeHtml(n.title)}</strong><span>${escapeHtml(n.body)}</span></div>`;
     }).join('');
   }
   document.body.appendChild(panel);
@@ -508,14 +514,14 @@ function _updateContextBar() {
     percent = null;
   }
 
-  if (percent == null) {
+  if (percent == null || isNaN(percent)) {
     label.textContent = 'Ctx: N/A';
     fill.style.width = '0';
     ctxEl.className = 'context-bar';
     return;
   }
 
-  const p = Math.round(percent);
+  const p = Math.max(0, Math.min(100, Math.round(percent)));
   label.textContent = `Ctx: ${p}%`;
   fill.style.width = `${p}%`;
 
@@ -627,7 +633,7 @@ window.nexus.onSessionExited(() => { refreshDashboard(); updateStatusBar(); });
 
 // Update session count (event-driven, no polling)
 function updateStatusBar() {
-  const count = tabManager.tabs.size;
+  const count = [...tabManager.tabs.values()].filter(t => t.type === 'terminal').length;
   document.getElementById('session-count').textContent = `${count} session${count !== 1 ? 's' : ''}`;
 }
 updateStatusBar();

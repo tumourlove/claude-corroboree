@@ -57,7 +57,7 @@ class WorktreeManager {
       const opts = { cwd: info.repoPath, encoding: 'utf8', timeout: 30000 };
 
       if (strategy === 'squash') {
-        execSync(`git merge --squash ${info.branch}`, opts);
+        execSync(`git merge --squash "${info.branch}"`, opts);
         execSync(`git commit -m "Squashed merge from ${info.branch}"`, opts);
       } else if (strategy === 'cherry-pick') {
         // Get commits unique to this branch
@@ -66,7 +66,7 @@ class WorktreeManager {
           execSync(`git cherry-pick ${commit}`, opts);
         }
       } else {
-        execSync(`git merge ${info.branch}`, opts);
+        execSync(`git merge "${info.branch}"`, opts);
       }
 
       return { success: true, branch: info.branch, strategy };
@@ -153,9 +153,10 @@ class WorktreeManager {
       }
     }
 
-    // Stage all resolved files and commit
+    // Stage only resolved files and commit
     try {
-      execSync('git add .', opts);
+      const resolvedFiles = resolved.filter(r => r.success).map(r => `"${r.file}"`).join(' ');
+      if (resolvedFiles) execSync(`git add ${resolvedFiles}`, opts);
       execSync('git commit --no-edit', opts);
     } catch (e) {
       return { success: false, resolved, error: `Failed to commit: ${e.message}` };
@@ -178,7 +179,8 @@ class WorktreeManager {
   }
 
   cleanup() {
-    for (const [id] of this.worktrees) {
+    const ids = [...this.worktrees.keys()];
+    for (const id of ids) {
       this.removeWorktree(id);
     }
   }

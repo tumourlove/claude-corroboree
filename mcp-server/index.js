@@ -29,6 +29,7 @@ const TEMPLATE_TOOLS = {
     'recall', 'get_lineage',
     'request_promotion', 'propose_task', 'list_proposals',
     'close_session', 'close_all_done',
+    'load_toolpack', 'unload_toolpack', 'list_toolpacks',
   ]),
   reviewer: new Set([
     'list_sessions', 'send_message', 'read_messages', 'report_result',
@@ -44,6 +45,7 @@ const TEMPLATE_TOOLS = {
     'remember', 'recall', 'get_lineage',
     'request_promotion', 'propose_task', 'list_proposals',
     'close_session', 'close_all_done',
+    'load_toolpack', 'unload_toolpack', 'list_toolpacks',
   ]),
   explorer: new Set([
     'list_sessions', 'read_messages', 'report_result',
@@ -57,6 +59,7 @@ const TEMPLATE_TOOLS = {
     'recall', 'get_lineage',
     'request_promotion', 'propose_task', 'list_proposals',
     'close_session', 'close_all_done',
+    'load_toolpack', 'unload_toolpack', 'list_toolpacks',
   ]),
 };
 
@@ -89,10 +92,10 @@ const TOOL_PACKS = {
     'propose_decision', 'vote', 'resolve_decision', 'list_decisions',
   ],
   lifecycle: [
-    'reset_session', 'close_session', 'close_all_done',
+    'reset_session',
     'promote_session', 'demote_session', 'request_promotion',
     'merge_worker', 'resolve_conflicts', 'list_worktrees', 'get_worker_diff',
-    'request_context_handoff', 'save_checkpoint', 'context_estimate',
+    'request_context_handoff', 'save_checkpoint',
   ],
   history: [
     'read_session_history', 'search_across_sessions', 'query_git_status',
@@ -433,7 +436,7 @@ server.tool(
 // W9: context_estimate tool
 server.tool(
   'context_estimate',
-  'Get a rough estimate of your context window usage based on cumulative output',
+  'Get your context window usage percentage (parsed from Claude Code session transcript)',
   {},
   async () => {
     try {
@@ -443,8 +446,8 @@ server.tool(
       });
       return {
         content: [{ type: 'text', text: JSON.stringify({
-          output_bytes: response.output_bytes,
           estimated_context_percent: response.estimated_context_percent,
+          total_tokens: response.total_tokens,
           level: response.level,
         }, null, 2) }],
       };
@@ -663,28 +666,6 @@ server.tool(
     } catch (e) {
       return { content: [{ type: 'text', text: `Error: ${e.message}` }] };
     }
-  }
-);
-
-server.tool(
-  'spawn_explorer',
-  'Spawn a read-only explorer session that can cross-reference other sessions',
-  {
-    task_description: z.string().describe('What to analyze across sessions'),
-    session_ids_to_review: z.array(z.string()).describe('Which sessions to review'),
-  },
-  async ({ task_description, session_ids_to_review }) => {
-    sendIpc({
-      type: 'spawn_session',
-      from: SESSION_ID,
-      working_directory: process.cwd(),
-      initial_prompt: `You are an explorer session. Your task: ${task_description}. Review sessions: ${session_ids_to_review.join(', ')}`,
-      label: 'Explorer',
-      template: 'explorer',
-    });
-    return {
-      content: [{ type: 'text', text: `Explorer session spawned to analyze: ${task_description}` }],
-    };
   }
 );
 
@@ -2061,7 +2042,8 @@ server.tool(
       const reg = toolRegistry[toolName];
       if (!reg) continue;
       // Check template permissions — if whitelist exists, only enable allowed tools
-      if (allowed !== null && !allowed.has(toolName)) {
+      // Meta-tools (load/unload/list toolpacks) are always allowed regardless of template
+      if (allowed !== null && !allowed.has(toolName) && !META_TOOLS.has(toolName)) {
         blocked.push(toolName);
         continue;
       }
@@ -2101,13 +2083,24 @@ server.tool(
       return { content: [{ type: 'text', text: `Pack "${pack}" is not loaded.` }] };
     }
 
+    const coreTools = TOOL_PACKS.core;
+    let disabledCount = 0;
     for (const toolName of tools) {
+      // Don't disable a tool if it's also in the always-loaded core set or another loaded pack
+      const isInCore = coreTools.includes(toolName);
+      const isInOtherLoadedPack = Object.entries(TOOL_PACKS).some(([packName, packTools]) =>
+        packName !== pack && loadedPacks.has(packName) && packTools.includes(toolName)
+      );
+      if (isInCore || isInOtherLoadedPack) continue;
       const reg = toolRegistry[toolName];
-      if (reg) reg.disable();
+      if (reg) {
+        reg.disable();
+        disabledCount++;
+      }
     }
 
     loadedPacks.delete(pack);
-    return { content: [{ type: 'text', text: `Unloaded pack "${pack}" — ${tools.length} tool(s) disabled.` }] };
+    return { content: [{ type: 'text', text: `Unloaded pack "${pack}" — ${disabledCount} tool(s) disabled.` }] };
   }
 );
 

@@ -297,6 +297,21 @@ export class Dashboard {
 
   updateSessions(sessions) {
     this._lastSessions = sessions;
+
+    // Prune stale entries from tracking Maps
+    const activeIds = new Set((sessions || []).map(s => s.id));
+    for (const id of this._activityBuffers.keys()) {
+      if (!activeIds.has(id)) this._activityBuffers.delete(id);
+    }
+    for (const id of this._moods.keys()) {
+      if (!activeIds.has(id)) this._moods.delete(id);
+    }
+    if (this._progress) {
+      for (const id of Object.keys(this._progress)) {
+        if (!activeIds.has(id)) delete this._progress[id];
+      }
+    }
+
     const el = this.container.querySelector('#dash-cards');
     if (!sessions || sessions.length === 0) {
       el.innerHTML = '<div class="dashboard-empty">No sessions yet</div>';
@@ -568,7 +583,7 @@ export class Dashboard {
   }
 
   _escapeHtml(str) {
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    return String(str || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   }
 
   _shortenPath(p) {
