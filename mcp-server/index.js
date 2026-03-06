@@ -60,6 +60,56 @@ const TEMPLATE_TOOLS = {
   ]),
 };
 
+// Tool pack definitions — groups of tools that can be loaded/unloaded dynamically
+const TOOL_PACKS = {
+  core: [
+    'list_sessions', 'send_message', 'read_messages', 'broadcast',
+    'report_result', 'stream_progress', 'report_handoff',
+    'spawn_session', 'spawn_workers', 'wait_for_workers',
+    'get_session_status', 'session_info',
+    'scratchpad_set', 'scratchpad_get', 'scratchpad_list', 'scratchpad_delete',
+    'batch_scratchpad', 'scratchpad_cas',
+  ],
+  tasks: [
+    'push_task', 'pull_task', 'update_task', 'list_tasks', 'get_task_graph',
+    'propose_task', 'list_proposals', 'review_proposal',
+  ],
+  files: [
+    'claim_file', 'release_file', 'list_locks', 'share_snippet', 'get_snippet',
+  ],
+  knowledge: [
+    'kb_add', 'kb_search', 'kb_list', 'remember', 'recall', 'get_lineage',
+    'kg_add_entity', 'kg_add_relationship', 'kg_query', 'kg_traverse', 'kg_export',
+  ],
+  review: [
+    'submit_for_review', 'claim_review', 'approve_review', 'request_changes', 'list_reviews',
+  ],
+  decisions: [
+    'propose_decision', 'vote', 'resolve_decision', 'list_decisions',
+  ],
+  lifecycle: [
+    'reset_session', 'close_session', 'close_all_done',
+    'promote_session', 'demote_session', 'request_promotion',
+    'merge_worker', 'resolve_conflicts', 'list_worktrees', 'get_worker_diff',
+    'request_context_handoff', 'save_checkpoint', 'context_estimate',
+  ],
+  history: [
+    'read_session_history', 'search_across_sessions', 'query_git_status',
+  ],
+  events: [
+    'subscribe', 'unsubscribe', 'publish', 'structured_message',
+  ],
+};
+
+// Meta-tool names that are always enabled (never disabled by toolpacks)
+const META_TOOLS = new Set(['load_toolpack', 'unload_toolpack', 'list_toolpacks']);
+
+// Registry of all registered tool objects (populated by server.tool wrapper)
+const toolRegistry = {};
+
+// Track which packs are currently loaded
+const loadedPacks = new Set(['core']);
+
 // Shared state (connected to main process via IPC)
 const messageBus = new MessageBus();
 const registry = new SessionRegistry();
@@ -214,7 +264,7 @@ function handleIpcMessage(msg) {
 
 // Create MCP server
 const server = new McpServer({
-  name: 'claude-nexus',
+  name: 'claude-corroboree',
   version: '0.1.0',
 });
 
@@ -238,7 +288,9 @@ server.tool = function(name, description, schema, handler) {
     }
     return handler(args);
   };
-  return originalTool(name, description, schema, wrappedHandler);
+  const registeredTool = originalTool(name, description, schema, wrappedHandler);
+  toolRegistry[name] = registeredTool;
+  return registeredTool;
 };
 
 // --- Core Communication Tools ---
@@ -1949,6 +2001,133 @@ server.tool(
     }
   }
 );
+
+// --- Toolpack System ---
+
+// Build a reverse lookup: tool name -> pack name
+function getPackForTool(name) {
+  for (const [pack, tools] of Object.entries(TOOL_PACKS)) {
+    if (tools.includes(name)) return pack;
+  }
+  return null;
+}
+
+// Build a map of tool name -> description from the registry
+function getToolDescription(name) {
+  const tool = toolRegistry[name];
+  if (!tool) return '';
+  // The registered tool stores description in tool.description
+  return tool.description || '';
+}
+
+// Disable all tools not in the core pack or meta-tools
+function disableNonCoreTools() {
+  const coreTools = new Set(TOOL_PACKS.core);
+  for (const [name, tool] of Object.entries(toolRegistry)) {
+    if (!coreTools.has(name) && !META_TOOLS.has(name)) {
+      tool.disable();
+    }
+  }
+}
+
+server.tool(
+  'load_toolpack',
+  'Load a pack of tools to make them available. Packs: tasks, files, knowledge, review, decisions, lifecycle, history, events. Use list_toolpacks to see all packs and their contents.',
+  {
+    pack: z.string().describe('Pack name to load (e.g. "scratchpad", "tasks", "files")'),
+  },
+  async ({ pack }) => {
+    if (pack === 'core') {
+      return { content: [{ type: 'text', text: 'The core pack is always loaded.' }] };
+    }
+    const tools = TOOL_PACKS[pack];
+    if (!tools) {
+      const available = Object.keys(TOOL_PACKS).filter(p => p !== 'core').join(', ');
+      return { content: [{ type: 'text', text: `Unknown pack "${pack}". Available packs: ${available}` }] };
+    }
+    if (loadedPacks.has(pack)) {
+      return { content: [{ type: 'text', text: `Pack "${pack}" is already loaded.` }] };
+    }
+
+    const allowed = TEMPLATE_TOOLS[SESSION_TEMPLATE];
+    const enabled = [];
+    const blocked = [];
+
+    for (const toolName of tools) {
+      const reg = toolRegistry[toolName];
+      if (!reg) continue;
+      // Check template permissions — if whitelist exists, only enable allowed tools
+      if (allowed !== null && !allowed.has(toolName)) {
+        blocked.push(toolName);
+        continue;
+      }
+      reg.enable();
+      enabled.push(toolName);
+    }
+
+    loadedPacks.add(pack);
+
+    let text = `Loaded pack "${pack}" — ${enabled.length} tool(s) now available:\n\n`;
+    for (const name of enabled) {
+      const desc = getToolDescription(name);
+      text += `  - ${name}: ${desc}\n`;
+    }
+    if (blocked.length > 0) {
+      text += `\n${blocked.length} tool(s) blocked by template permissions: ${blocked.join(', ')}`;
+    }
+    return { content: [{ type: 'text', text }] };
+  }
+);
+
+server.tool(
+  'unload_toolpack',
+  'Unload a pack of tools to reduce clutter. Cannot unload the core pack.',
+  {
+    pack: z.string().describe('Pack name to unload'),
+  },
+  async ({ pack }) => {
+    if (pack === 'core') {
+      return { content: [{ type: 'text', text: 'Cannot unload the core pack.' }] };
+    }
+    const tools = TOOL_PACKS[pack];
+    if (!tools) {
+      return { content: [{ type: 'text', text: `Unknown pack "${pack}".` }] };
+    }
+    if (!loadedPacks.has(pack)) {
+      return { content: [{ type: 'text', text: `Pack "${pack}" is not loaded.` }] };
+    }
+
+    for (const toolName of tools) {
+      const reg = toolRegistry[toolName];
+      if (reg) reg.disable();
+    }
+
+    loadedPacks.delete(pack);
+    return { content: [{ type: 'text', text: `Unloaded pack "${pack}" — ${tools.length} tool(s) disabled.` }] };
+  }
+);
+
+server.tool(
+  'list_toolpacks',
+  'List all available tool packs with their tools and loaded/unloaded status.',
+  {},
+  async () => {
+    let text = 'Tool Packs:\n\n';
+    for (const [pack, tools] of Object.entries(TOOL_PACKS)) {
+      const status = loadedPacks.has(pack) ? 'LOADED' : 'unloaded';
+      text += `[${status}] ${pack} (${tools.length} tools):\n`;
+      for (const name of tools) {
+        const desc = getToolDescription(name);
+        text += `    ${name}${desc ? ': ' + desc : ''}\n`;
+      }
+      text += '\n';
+    }
+    return { content: [{ type: 'text', text }] };
+  }
+);
+
+// Disable non-core tools on startup
+disableNonCoreTools();
 
 // Start server
 async function main() {

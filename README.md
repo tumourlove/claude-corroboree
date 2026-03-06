@@ -177,8 +177,8 @@ Corroboree ships with `.claude/skills/` that teach sessions how to coordinate ef
 ### From Source (Development)
 
 ```bash
-git clone https://github.com/tumourlove/claude-nexus.git
-cd claude-nexus
+git clone https://github.com/tumourlove/claude-corroboree.git
+cd claude-corroboree
 npm install
 npm start
 ```

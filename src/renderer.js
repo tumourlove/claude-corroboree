@@ -77,11 +77,11 @@ document.addEventListener('mousedown', (e) => {
 // Doc links open in default browser
 document.getElementById('help-docs-link').addEventListener('click', (e) => {
   e.preventDefault();
-  window.nexus.openExternal('https://github.com/tumourlove/claude-nexus');
+  window.nexus.openExternal('https://github.com/tumourlove/claude-corroboree');
 });
 document.getElementById('help-issues-link').addEventListener('click', (e) => {
   e.preventDefault();
-  window.nexus.openExternal('https://github.com/tumourlove/claude-nexus/issues');
+  window.nexus.openExternal('https://github.com/tumourlove/claude-corroboree/issues');
 });
 
 // Keyboard shortcuts
