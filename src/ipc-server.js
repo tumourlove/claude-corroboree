@@ -60,6 +60,20 @@ class IpcServer {
     if (stats) {
       if (!stats.outputBytes) stats.outputBytes = 0;
       stats.outputBytes += Buffer.byteLength(data);
+
+      // Throttled push to renderer — update context bar every 5 seconds max per session
+      if (!stats._ctxPushTimer) {
+        stats._ctxPushTimer = setTimeout(() => {
+          stats._ctxPushTimer = null;
+          if (this.sessionManager.mainWindow) {
+            const estimate = this.getContextEstimate(sessionId);
+            this.sessionManager.mainWindow.webContents.send('session:context-update', {
+              id: sessionId,
+              percent: estimate.estimated_context_percent,
+            });
+          }
+        }, 5000);
+      }
     }
   }
 
@@ -67,7 +81,9 @@ class IpcServer {
   getContextEstimate(sessionId) {
     const stats = this.sessionStats.get(sessionId) || {};
     const outputBytes = stats.outputBytes || 0;
-    const estimatedPercent = Math.min(100, Math.round(outputBytes / 128000 * 100));
+    // ~200K token context ≈ 800KB text, but terminal output includes ANSI escapes (~2x inflation)
+    // So ~400KB of raw terminal output ≈ full context. Use 500KB as denominator for safety margin.
+    const estimatedPercent = Math.min(100, Math.round(outputBytes / 512000 * 100));
     let level;
     if (estimatedPercent < 40) level = 'low';
     else if (estimatedPercent < 65) level = 'medium';
@@ -528,14 +544,14 @@ class IpcServer {
 
       // --- Task Queue ---
       case 'task_push': {
-        const taskId = this.taskQueue.push({
+        const result = this.taskQueue.push({
           title: msg.title,
           description: msg.description,
           priority: msg.priority,
           dependencies: msg.dependencies,
           createdBy: msg.createdBy,
         });
-        this._reply(socket, { type: 'task_pushed', taskId, requestId: msg.requestId });
+        this._reply(socket, { type: 'task_pushed', taskId: result.id || null, error: result.error || null, requestId: msg.requestId });
         // Notify dashboard
         if (this.sessionManager.mainWindow) {
           this.sessionManager.mainWindow.webContents.send('tasks:updated', { tasks: this.taskQueue.list() });
@@ -1002,7 +1018,7 @@ class IpcServer {
         // Forward context percentage to renderer for status bar display
         if (this.sessionManager.mainWindow && estimate.estimated_context_percent != null) {
           this.sessionManager.mainWindow.webContents.send('session:context-update', {
-            id: currentSessionId,
+            id: msg.sessionId,
             percent: estimate.estimated_context_percent,
           });
         }

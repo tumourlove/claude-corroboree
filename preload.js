@@ -52,6 +52,10 @@ contextBridge.exposeInMainWorld('nexus', {
   onContextUpdate: (cb) => ipcRenderer.on('session:context-update', (_e, data) => cb(data)),
   onChatMessage: (cb) => ipcRenderer.on('chat:message', (_e, data) => cb(data)),
 
+  // Notifications
+  getNotificationsEnabled: () => ipcRenderer.invoke('notifications:get-enabled'),
+  setNotificationsEnabled: (enabled) => ipcRenderer.send('notifications:set-enabled', enabled),
+
   // Recipes
   loadRecipes: (projectPath) => ipcRenderer.invoke('app:load-recipes', { projectPath }),
 

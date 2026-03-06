@@ -36,6 +36,7 @@ function createWindow() {
     width: 1200,
     height: 800,
     backgroundColor: '#1a1a2e',
+    icon: path.join(__dirname, 'assets', 'icon-256.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -358,6 +359,16 @@ function registerShellIfNeeded() {
     console.error('Failed to register shell:', e.message);
   }
 }
+
+// Notification toggle IPC
+ipcMain.handle('notifications:get-enabled', () => {
+  return notificationManager ? notificationManager.getEnabled() : true;
+});
+ipcMain.on('notifications:set-enabled', (_event, enabled) => {
+  if (notificationManager) notificationManager.setEnabled(enabled);
+});
+
+app.setAppUserModelId('com.corroboree.app');
 
 app.whenReady().then(() => {
   // Check for unclean shutdown and offer recovery

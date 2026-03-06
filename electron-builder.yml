@@ -1,5 +1,6 @@
-appId: com.claude-corroboree.app
-productName: Claude Corroboree
+appId: com.corroboree.app
+productName: Corroboree
+icon: assets/icon-256.png
 directories:
   output: release
   buildResources: build
@@ -13,15 +14,18 @@ extraResources:
     to: mcp-server.js
   - from: scripts/
     to: scripts/
+  - from: assets/
+    to: assets/
 publish:
   provider: github
   owner: tumourlove
   repo: claude-corroboree
 win:
   target: [nsis, portable]
+  icon: assets/icon.ico
   signAndEditExecutable: false
 nsis:
-  artifactName: "Claude-Corroboree-Setup-${version}.${ext}"
+  artifactName: "Corroboree-Setup-${version}.${ext}"
   oneClick: false
   perMachine: false
   allowElevation: false

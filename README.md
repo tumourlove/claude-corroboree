@@ -2,7 +2,7 @@
 
 A tabbed Electron terminal for running multiple Claude Code sessions in parallel with full MCP-powered coordination.
 
-![Claude Corroboree](https://img.shields.io/badge/version-0.4.2-blue) ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey) ![License](https://img.shields.io/badge/license-MIT-green)
+![Claude Corroboree](https://img.shields.io/badge/version-0.5.0-blue) ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ## What It Does
 
@@ -24,8 +24,10 @@ The **Lead** session breaks tasks into subtasks, spawns worker sessions, monitor
 - Tab entrance animations and completion shimmer effects
 - Terminal font zoom (Ctrl+=/-)
 
-### MCP Coordination (~70 Tools)
-Each session automatically gets tools for coordination, gated by template permissions:
+### MCP Coordination (Dynamic Toolpacks)
+Each session starts with ~18 core tools (communication, orchestration, scratchpad, progress). Additional tool packs can be loaded on demand via `load_toolpack`/`unload_toolpack`, reducing noise and token overhead. Available packs: tasks, files, knowledge, review, decisions, lifecycle, history, events.
+
+Tools available across all packs, gated by template permissions:
 
 | Category | Tools |
 |----------|-------|
@@ -81,6 +83,8 @@ Corroboree ships with `.claude/skills/` that teach sessions how to coordinate ef
 - **Orchestration timeline** — Gantt-style view of session lifespans and task flow
 - **Sound design** (Ctrl+Shift+M) — Optional audio feedback for spawn/complete/error events
 - **Toast notifications** — Pause-on-hover with history panel
+- **Notification toggle** — Bell icon in status bar to enable/disable system notifications (in-app toasts always show)
+- **Custom app icon** — 16-bit SNES-style pixel art campfire gathering circle
 
 ### Advanced Coordination
 - **Structured messages** — Type/subject/data payloads for machine-readable inter-session communication
@@ -220,7 +224,7 @@ Produces Windows NSIS installer and portable exe in `release/`.
 │       │              │              │                      │
 │  ┌────┴─────┐  ┌────┴─────┐  ┌────┴─────┐                │
 │  │ MCP Srv  │  │ MCP Srv  │  │ MCP Srv  │                │
-│  │(~70 tools)│ │(permissioned)│(permissioned)│            │
+│  │(toolpacks)│ │(permissioned)│(permissioned)│            │
 │  └────┬─────┘  └────┴─────┘  └────┴─────┘                │
 │       │              │              │                      │
 │  ┌────┴──────────────┴──────────────┴──────────────────┐  │

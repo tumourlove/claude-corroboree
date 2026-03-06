@@ -135,6 +135,8 @@ class SessionManager {
     ptyProc.onExit(({ exitCode }) => {
       const sess = this.sessions.get(id);
       if (!sess) return;
+      // Skip if this PTY was replaced by respawnSession (a new PTY now owns this session ID)
+      if (sess.pty !== ptyProc) return;
 
       if (exitCode !== 0 && sess.retryCount < sess.maxRetries && !sess.isLead) {
         // Exponential backoff: 2s, 8s, 30s

@@ -371,6 +371,48 @@ function _toggleNotificationHistory() {
 
 _initNotificationHistoryPanel();
 
+// --- Notification toggle button in status bar ---
+function _initNotificationToggle() {
+  const statusBar = document.getElementById('status-bar');
+  if (!statusBar) return;
+  const wrapper = document.createElement('span');
+  wrapper.id = 'notif-toggle-wrapper';
+  const btn = document.createElement('span');
+  btn.id = 'notif-toggle-btn';
+  btn.className = 'notif-toggle-btn';
+  btn.title = 'Toggle system notifications';
+
+  // Restore from localStorage
+  const stored = localStorage.getItem('notif-enabled');
+  let enabled = stored === null ? true : stored === 'true';
+
+  function updateIcon() {
+    btn.textContent = enabled ? '\uD83D\uDD14' : '\uD83D\uDD15';
+    btn.classList.toggle('notif-muted', !enabled);
+  }
+  updateIcon();
+
+  // Sync initial state to main process
+  window.nexus.setNotificationsEnabled(enabled);
+
+  btn.addEventListener('click', () => {
+    enabled = !enabled;
+    localStorage.setItem('notif-enabled', String(enabled));
+    window.nexus.setNotificationsEnabled(enabled);
+    updateIcon();
+  });
+
+  wrapper.appendChild(btn);
+  // Insert before the notification history wrapper
+  const historyWrapper = document.getElementById('notif-history-wrapper');
+  if (historyWrapper) {
+    statusBar.insertBefore(wrapper, historyWrapper);
+  } else {
+    statusBar.appendChild(wrapper);
+  }
+}
+_initNotificationToggle();
+
 // --- Cost indicator in status bar ---
 function _initCostIndicator() {
   const statusBar = document.getElementById('status-bar');

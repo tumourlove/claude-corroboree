@@ -1387,6 +1387,23 @@ kbd {
 .notif-history-error { border-left: 2px solid var(--error); }
 .notif-history-empty { color: #555; font-style: italic; padding: 12px; text-align: center; font-size: 12px; }
 
+/* Notification toggle */
+#notif-toggle-wrapper {
+  position: relative;
+  margin-left: 4px;
+}
+.notif-toggle-btn {
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 4px;
+  transition: opacity 0.15s;
+  user-select: none;
+}
+.notif-toggle-btn:hover { opacity: 1; }
+.notif-toggle-btn.notif-muted {
+  opacity: 0.4;
+}
+
 /* Scroll-to-bottom button */
 .scroll-to-bottom {
   position: absolute;

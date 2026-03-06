@@ -220,8 +220,9 @@ export class TabManager {
       }
 
       // Shift+Enter: send newline to Claude Code (for multi-line input)
+      // Claude Code enables kitty keyboard protocol — Shift+Enter = ESC[13;2u
       if (e.shiftKey && e.key === 'Enter') {
-        window.nexus.terminalWrite(id, '\n');
+        window.nexus.terminalWrite(id, '\x1b[13;2u');
         return false;
       }
 

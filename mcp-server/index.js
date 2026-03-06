@@ -894,6 +894,9 @@ server.tool(
         dependencies,
         createdBy: SESSION_ID,
       });
+      if (response.error) {
+        return { content: [{ type: 'text', text: `Error: ${response.error}` }] };
+      }
       return {
         content: [{ type: 'text', text: `Task #${response.taskId} created: ${title} (priority ${priority})` }],
       };
