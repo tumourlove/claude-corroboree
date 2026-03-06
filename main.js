@@ -379,6 +379,23 @@ ipcMain.on('notifications:set-enabled', (_event, enabled) => {
   if (notificationManager) notificationManager.setEnabled(enabled);
 });
 
+// --- Auth plan detection ---
+function detectAuthPlan() {
+  const { execFile } = require('child_process');
+  execFile('claude', ['auth', 'status'], { encoding: 'utf8', timeout: 5000 }, (err, stdout) => {
+    if (err || !stdout) return;
+    try {
+      const info = JSON.parse(stdout);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('auth:plan-info', {
+          plan: info.subscriptionType || null,
+          authMethod: info.authMethod || null,
+        });
+      }
+    } catch { /* not valid JSON, ignore */ }
+  });
+}
+
 app.setAppUserModelId('com.claude-corroboree.app');
 
 app.whenReady().then(() => {
@@ -405,6 +422,7 @@ app.whenReady().then(() => {
   createWindow();
   setupAutoUpdater();
   registerShellIfNeeded();
+  detectAuthPlan();
 });
 app.on('window-all-closed', () => {
   if (checkpointManager) {

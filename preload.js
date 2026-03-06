@@ -73,4 +73,7 @@ contextBridge.exposeInMainWorld('nexus', {
   onUpdateProgress: (cb) => ipcRenderer.on('updater:progress', (_e, d) => cb(d)),
   onUpdateReady: (cb) => ipcRenderer.on('updater:ready', () => cb()),
   onUpdateError: (cb) => ipcRenderer.on('updater:error', (_e, d) => cb(d)),
+
+  // Auth plan
+  onPlanInfo: (cb) => ipcRenderer.on('auth:plan-info', (_e, d) => cb(d)),
 });

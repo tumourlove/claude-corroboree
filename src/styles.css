@@ -595,6 +595,22 @@ html, body { width: 100%; height: 100%; background: var(--bg-primary); overflow:
   color: var(--text-primary, #e0e0e0);
 }
 
+/* Plan badge */
+.plan-badge {
+  font-size: 10px;
+  font-weight: bold;
+  padding: 1px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  line-height: 1.2;
+  color: #1a1a1a;
+}
+.plan-max { background: #d4a843; }
+.plan-pro { background: #5a8ecf; }
+.plan-team { background: #9b6ec7; }
+.plan-api, .plan-badge { background: #666; color: #ddd; }
+.plan-max, .plan-pro, .plan-team { color: #1a1a1a; }
+
 /* Cost indicator */
 .cost-indicator {
   color: var(--info);

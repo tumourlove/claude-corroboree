@@ -638,6 +638,30 @@ function updateStatusBar() {
 }
 updateStatusBar();
 
+// --- Plan badge in status bar ---
+function _initPlanBadge() {
+  window.nexus.onPlanInfo(({ plan, authMethod }) => {
+    if (!plan && authMethod !== 'api_key') return;
+    const statusBar = document.getElementById('status-bar');
+    if (!statusBar) return;
+    const badge = document.createElement('span');
+    badge.id = 'plan-badge';
+    const label = plan || (authMethod === 'api_key' ? 'API' : null);
+    if (!label) return;
+    badge.className = `plan-badge plan-${label.toLowerCase()}`;
+    badge.textContent = label.toUpperCase();
+    badge.title = `Subscription: ${label.toUpperCase()}`;
+    // Insert after session-count
+    const sessionCount = document.getElementById('session-count');
+    if (sessionCount && sessionCount.nextSibling) {
+      statusBar.insertBefore(badge, sessionCount.nextSibling);
+    } else {
+      statusBar.appendChild(badge);
+    }
+  });
+}
+_initPlanBadge();
+
 // --- Auto-updater UI ---
 const updateEl = document.getElementById('update-status');
 const versionEl = document.getElementById('app-version');
